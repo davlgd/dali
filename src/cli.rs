@@ -29,4 +29,9 @@ pub struct Cli {
     /// Cannot be combined with `--dry-run` or `--yes`.
     #[arg(long, value_name = "FILE", conflicts_with_all = ["dry_run", "yes"])]
     pub save_config: Option<PathBuf>,
+
+    /// Do not reboot at the end. By default a finished install reboots into the
+    /// new system (immediately with `--yes`, after a confirmation otherwise).
+    #[arg(long)]
+    pub no_reboot: bool,
 }

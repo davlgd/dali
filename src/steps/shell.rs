@@ -19,6 +19,15 @@ impl Step for ShellSetup {
 
     fn run(&self, ctx: &mut Context<'_>) -> Result<()> {
         let user = &ctx.config.user.username;
+
+        // Put ~/.local/bin on PATH for every login shell (system-wide), so the
+        // tools installed there during provisioning — Claude Code, mise, the V
+        // symlink — are found both by the provisioning login shells and after
+        // reboot. profile.d is the canonical, shell-agnostic place for this.
+        ctx.info("adding ~/.local/bin to PATH (/etc/profile.d)");
+        ctx.sys
+            .write(&target_path("/etc/profile.d/10-dali-path.sh"), PROFILE_PATH)?;
+
         ctx.info(format!(
             "appending aliases and helpers to /home/{user}/.bashrc"
         ));
@@ -27,25 +36,18 @@ impl Step for ShellSetup {
     }
 }
 
-/// The block appended to `~/.bashrc`. Clipboard helpers shim macOS `pbcopy`/
-/// `pbpaste` onto `wl-clipboard` / `xclip` / `xsel`.
+/// System-wide PATH addition for login shells; idempotent (no duplicate entry).
+const PROFILE_PATH: &str = r#"# Added by DALI: per-user local binaries on PATH
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+"#;
+
+/// The block appended to `~/.bashrc`.
 const BASHRC_BLOCK: &str = r#"
 # >>> DALI shell setup >>>
-export PATH="$HOME/.local/bin:$PATH"
-
-# macOS pbcopy/pbpaste → Wayland/X11 clipboard
-pbcopy() {
-    if command -v wl-copy >/dev/null; then wl-copy
-    elif command -v xclip >/dev/null; then xclip -selection clipboard
-    elif command -v xsel >/dev/null; then xsel --clipboard --input
-    else cat >/dev/null; echo "pbcopy: no clipboard tool found" >&2; fi
-}
-pbpaste() {
-    if command -v wl-paste >/dev/null; then wl-paste --no-newline
-    elif command -v xclip >/dev/null; then xclip -selection clipboard -o
-    elif command -v xsel >/dev/null; then xsel --clipboard --output
-    else echo "pbpaste: no clipboard tool found" >&2; fi
-}
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 
 mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
 
@@ -72,7 +74,7 @@ clean_cargo() {
 }
 
 f() { find / -type f -name "$1" 2> /dev/null; }
-alias pgen='gpg --gen-random --armor 2 32 | pbcopy'
+alias pgen='gpg --gen-random --armor 2 32'
 alias gl='git log --oneline --all --graph --decorate'
 alias gac='git add . && git commit -m'
 alias gst='git status'

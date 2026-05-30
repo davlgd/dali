@@ -8,6 +8,7 @@
   "root_password": "",
   "github_user": "davlgd",
   "extra_packages": ["htop"],
+  "aur_packages": [],
   "zram_swap": true,
   "default_apps": true,
   "provision": true

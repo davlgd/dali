@@ -63,8 +63,10 @@ pub fn run(cli: &Cli) -> Result<()> {
     if cli.dry_run {
         println!("\nDry run complete. Re-run without --dry-run to install.");
     } else {
-        let offer = if cli.yes {
+        let offer = if cli.no_reboot {
             RebootOffer::Skip
+        } else if cli.yes {
+            RebootOffer::Auto
         } else {
             RebootOffer::Ask
         };
@@ -73,46 +75,56 @@ pub fn run(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-/// Whether to offer an interactive reboot after a real install.
+/// What to do at the end of a real install. Rebooting is the default action;
+/// `--no-reboot` opts out.
 #[derive(Clone, Copy)]
 enum RebootOffer {
-    /// Interactive run: ask the user.
+    /// Interactive run: ask, defaulting to reboot.
     Ask,
-    /// Non-interactive (`--yes`): never reboot automatically.
+    /// Non-interactive (`--yes`): reboot immediately.
+    Auto,
+    /// `--no-reboot`: leave the machine running.
     Skip,
 }
 
-/// Report success and, on an interactive install, offer to reboot straight into
-/// the new system rather than just returning to the shell.
+/// Report success and, by default, reboot straight into the new system.
 fn finish_install(offer: RebootOffer, sys: &dyn Sys) {
     println!("\nInstallation complete.");
-    match offer {
+    let reboot = match offer {
         RebootOffer::Skip => {
             println!("Reboot into your new system when ready (e.g. `reboot`).");
+            false
         }
-        RebootOffer::Ask => match prompt_yes_no("Reboot now into your new system?") {
-            Ok(true) => {
-                println!("Rebooting…");
-                // If this succeeds the process goes away with the machine; if it
-                // somehow returns, fall through with a hint.
-                let _ = sys.run(&crate::system::Command::new("systemctl").arg("reboot"));
-                println!("Could not trigger reboot automatically; run `reboot` yourself.");
-            }
-            _ => println!("Reboot into your new system when ready (e.g. `reboot`)."),
-        },
+        RebootOffer::Auto => true,
+        RebootOffer::Ask => {
+            prompt_yes_no("Reboot now into your new system?", true).unwrap_or(false)
+        }
+    };
+    if reboot {
+        println!("Rebooting…");
+        // On success the process goes away with the machine; if it returns,
+        // surface a hint.
+        let _ = sys.run(&crate::system::Command::new("systemctl").arg("reboot"));
+        println!("Could not trigger reboot automatically; run `reboot` yourself.");
     }
 }
 
-/// Prompt a `[y/N]` question on the console (defaults to no).
-fn prompt_yes_no(question: &str) -> Result<bool> {
-    print!("{question} [y/N]: ");
+/// Prompt a yes/no question on the console. `default_yes` sets the answer used
+/// for an empty (just-Enter) response and the `[Y/n]` vs `[y/N]` hint.
+fn prompt_yes_no(question: &str, default_yes: bool) -> Result<bool> {
+    let hint = if default_yes { "[Y/n]" } else { "[y/N]" };
+    print!("{question} {hint}: ");
     io::stdout().flush().map_err(|e| Error::io("<stdout>", e))?;
     let mut answer = String::new();
     io::stdin()
         .read_line(&mut answer)
         .map_err(|e| Error::io("<stdin>", e))?;
     let answer = answer.trim().to_ascii_lowercase();
-    Ok(answer == "y" || answer == "yes")
+    if answer.is_empty() {
+        Ok(default_yes)
+    } else {
+        Ok(answer == "y" || answer == "yes")
+    }
 }
 
 /// Verify the live environment can support an install.

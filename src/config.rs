@@ -66,12 +66,9 @@ pub mod stack {
         "impala",
         "minio-client",
         "uv",
-        "wl-clipboard",
-        "xclip",
         "openssh",
+        "whois",
     ];
-    /// AUR packages installed during provisioning (needs an AUR helper).
-    pub const AUR_PACKAGES: &[&str] = &["pamac-aur"];
     /// Base services enabled in every install. `systemd-boot-update` keeps the
     /// ESP copy of systemd-boot current across upgrades; `fstrim.timer` runs
     /// periodic TRIM (SSD/NVMe).
@@ -162,6 +159,10 @@ pub struct InstallConfig {
     pub github_user: String,
     /// Extra packages to install on top of [`stack::BASE_PACKAGES`].
     pub extra_packages: Vec<String>,
+    /// AUR packages to install during provisioning via the bootstrapped `paru`.
+    /// Empty by default — `pamac-aur` was dropped as it currently needs an
+    /// older `libalpm` than Arch ships; add packages here once compatible.
+    pub aur_packages: Vec<String>,
     /// Enable a compressed RAM swap device (zram) sized to available memory.
     pub zram_swap: bool,
     /// Install the curated [`stack::DEFAULT_APPS`] set and enable their services
@@ -187,6 +188,7 @@ impl Default for InstallConfig {
             root_password: Secret::default(),
             github_user: String::new(),
             extra_packages: Vec::new(),
+            aur_packages: Vec::new(),
             zram_swap: true,
             default_apps: true,
             provision: true,
@@ -261,7 +263,7 @@ impl InstallConfig {
         if self.timezone.trim().is_empty() {
             return Err(Error::Config("timezone must not be empty".into()));
         }
-        for package in &self.extra_packages {
+        for package in self.extra_packages.iter().chain(&self.aur_packages) {
             validate_package_name(package)?;
         }
         if !self.github_user.is_empty() {

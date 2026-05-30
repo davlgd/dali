@@ -7,7 +7,6 @@
 //! It is skipped entirely when `provision` is false.
 
 use super::{Context, Step};
-use crate::config::stack;
 use crate::error::Result;
 use crate::system::{Command, target_path};
 
@@ -62,7 +61,7 @@ impl Step for Provision {
                  cd /tmp/paru-bin && makepkg -si --noconfirm",
             ),
         );
-        for pkg in stack::AUR_PACKAGES {
+        for pkg in ctx.config.aur_packages.clone() {
             best_effort(
                 ctx,
                 &format!("installing AUR package {pkg}"),

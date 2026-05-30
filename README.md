@@ -38,22 +38,24 @@ More precisely, every install gets:
 - **Default app set** (`default_apps`, on by default): `nano`,
   `bash-completion`, `atuin`, `bat`, `zellij`, `jq`, `jless`, `yt-dlp`,
   `ffmpeg`, `lazygit`, `lazydocker`, `glab`, `docker`, `docker-buildx`,
-  `avahi`, `impala`, `minio-client`, `uv`, `wl-clipboard`, `xclip`, `openssh`
-  — with `docker.service`, `avahi-daemon.service` and `sshd.service` enabled and
-  the user added to the `docker` group.
+  `avahi`, `impala`, `minio-client`, `uv`, `openssh`, `whois` — with
+  `docker.service`, `avahi-daemon.service` and `sshd.service` enabled and the
+  user added to the `docker` group.
 - **SSH keys** (optional, `github_user`): when set, that GitHub account's public
   keys (`https://github.com/<user>.keys`) are imported as the user's accepted
   SSH keys (`~/.ssh/authorized_keys`).
 - **Shell environment**: the user's `~/.bashrc` gets a set of aliases and helper
-  functions (`mkcd`, `gac`, `gl`, `gst`, `dps`, `myip`, `w`, `check`, …),
-  `~/.local/bin` on `PATH`, and `pbcopy`/`pbpaste` shims mapped onto
-  `wl-clipboard`/`xclip`/`xsel`.
-- **Provisioning** (`provision`, on by default, best-effort): the `pamac-aur`
-  AUR package (via a bootstrapped `paru`), the [V compiler](https://vlang.io)
-  built from source into `~/.local/bin`, plus the
-  [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
-  installers run as your user. Network-bound; failures are reported as warnings
-  and never abort the (already bootable) install.
+  functions (`mkcd`, `pgen`, `gac`, `gl`, `gst`, `dps`, `myip`, `w`, `check`, …)
+  and `~/.local/bin` on `PATH`.
+- **Provisioning** (`provision`, on by default, best-effort): bootstraps the
+  [`paru`](https://github.com/Morganamilo/paru) AUR helper, installs any
+  `aur_packages` you list through it, builds the [V compiler](https://vlang.io)
+  from source into `~/.local/bin`, and runs the [`mise`](https://mise.jdx.dev)
+  and [Claude Code](https://claude.com/claude-code) installers as your user.
+  Network-bound; failures are reported as warnings and never abort the (already
+  bootable) install. (`pamac-aur` is intentionally not in the defaults — it
+  currently needs an older `libalpm` than Arch ships; add it to `aur_packages`
+  once it is compatible again.)
 - **ESP**: FAT32, 1 GiB, mounted at `/boot`.
 - **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.
@@ -63,7 +65,8 @@ More precisely, every install gets:
 
 Set `"default_apps": false` for a bare bootable system, or `"provision": false`
 to skip the AUR/`mise`/Claude Code step. When a real install finishes, DALI
-**offers to reboot** straight into the new system.
+**reboots into the new system by default** (immediately with `--yes`, after a
+confirmation otherwise); pass `--no-reboot` to stay on the live environment.
 
 ## Install
 
@@ -108,6 +111,7 @@ From the Arch live ISO:
 | `--dry-run`          | Print the exact plan of actions and exit without changes.    |
 | `--yes`              | Skip the final "erase the disk" confirmation. Requires `--config`. |
 | `--save-config <F>`  | Write the effective config (from `--config`, or from the wizard if none) to a file and exit. Conflicts with `--dry-run`/`--yes`. |
+| `--no-reboot`        | Do not reboot at the end (default is to reboot into the new system). |
 
 ### Configuration file
 

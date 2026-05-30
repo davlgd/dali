@@ -211,7 +211,7 @@ def phase_install(p: Prepared, work: Path) -> None:
         vm.expect(r"root@archiso", timeout=60)
         vm.send("mkdir -p /payload && mount /dev/vdb /payload && echo MOUNTED_$?")
         vm.expect(r"MOUNTED_0", timeout=30)
-        vm.send("/payload/dali --config /payload/config.json --yes; echo DALI_RC=$?")
+        vm.send("/payload/dali --config /payload/config.json --yes --no-reboot; echo DALI_RC=$?")
         out = vm.expect(r"DALI_RC=\d", timeout=1800)
         rc = re.search(r"DALI_RC=(\d)", out)
         if not rc or rc.group(1) != "0":
