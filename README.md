@@ -126,6 +126,11 @@ rustup target add x86_64-unknown-linux-musl
 cargo build --release --target x86_64-unknown-linux-musl
 ```
 
+"Fully static" refers only to the `dali` executable's own linkage: at runtime
+DALI still drives the Arch live ISO toolchain (`sgdisk`, `mkfs.btrfs`,
+`pacstrap`, `bootctl`, `genfstab`, `blkid`, …) as subprocesses, so it is meant
+to run from that environment regardless of how it was linked.
+
 ## Development
 
 ```sh
@@ -133,7 +138,15 @@ cargo test                                  # unit + integration tests
 cargo clippy --all-targets -- -D warnings   # zero-warning policy (pedantic)
 cargo fmt --check                           # formatting
 ./scripts/ci.sh                             # all of the above in a clean Arch container
+
+# Rehearse the whole install plan on any Linux box — no Arch, root or hardware
+# needed, changes nothing:
+cargo run -- --dry-run --config examples/minimal.json
 ```
+
+DALI is tested at three levels — unit, a process-level dry-run integration
+test, and a real bootable QEMU/KVM install. See
+[`docs/TESTING.md`](docs/TESTING.md).
 
 ### Architecture
 

@@ -98,23 +98,101 @@ fn preflight(dry_run: bool) -> Result<()> {
 }
 
 /// Checks that must hold before the destructive pipeline runs on a real
-/// install: the target disk exists and the timezone is real. Both would
-/// otherwise only fail *after* the disk has been wiped.
+/// install. Everything here fails *before* any disk is touched, so a typo or a
+/// wrong target can never wipe the wrong device or leave a half-installed box.
 fn pre_wipe_checks(config: &InstallConfig) -> Result<()> {
-    if !Path::new(&config.disk).exists() {
+    // The target must be a whole disk DALI actually enumerates. This rejects
+    // partitions, regular files, and the live media in one check — none of
+    // those appear in `list_disks`.
+    let disks = probe::list_disks();
+    if !disks.iter().any(|d| d.path == config.disk) {
+        let available: Vec<&str> = disks.iter().map(|d| d.path.as_str()).collect();
+        let listed = if available.is_empty() {
+            "none detected".to_owned()
+        } else {
+            available.join(", ")
+        };
         return Err(Error::Config(format!(
-            "target disk `{}` does not exist",
+            "`{}` is not an installable whole disk (available: {listed})",
             config.disk
         )));
     }
-    let zoneinfo = format!("/usr/share/zoneinfo/{}", config.timezone);
-    if !Path::new(&zoneinfo).exists() {
+
+    // Never erase a disk that currently backs a mounted filesystem.
+    if disk_is_mounted(&config.disk) {
         return Err(Error::Config(format!(
-            "unknown timezone `{}` (no {zoneinfo})",
-            config.timezone
+            "`{}` or one of its partitions is mounted — refusing to erase it",
+            config.disk
+        )));
+    }
+
+    // Catch typo'd locale / keymap / timezone now rather than mid-pipeline.
+    require_exists(
+        &format!("/usr/share/zoneinfo/{}", config.timezone),
+        &format!("unknown timezone `{}`", config.timezone),
+    )?;
+    let locale_base = config.locale.split('.').next().unwrap_or(&config.locale);
+    require_exists(
+        &format!("/usr/share/i18n/locales/{locale_base}"),
+        &format!("unknown locale `{}`", config.locale),
+    )?;
+    if !keymap_exists(&config.keymap) {
+        return Err(Error::Config(format!(
+            "unknown console keymap `{}`",
+            config.keymap
         )));
     }
     Ok(())
+}
+
+/// Whether `path` exists, mapping absence to a descriptive config error.
+fn require_exists(path: &str, message: &str) -> Result<()> {
+    if Path::new(path).exists() {
+        Ok(())
+    } else {
+        Err(Error::Config(format!("{message} (no {path})")))
+    }
+}
+
+/// Whether `disk` (or any of its partitions) appears as a mount source in
+/// `/proc/mounts`. Conservative: on read failure it reports "not mounted".
+fn disk_is_mounted(disk: &str) -> bool {
+    let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
+        return false;
+    };
+    // A mount source is either the disk itself or one of its partitions
+    // (`/dev/vda`, `/dev/vda1`, `/dev/nvme0n1p2`, …), all of which begin with
+    // the whole-disk path.
+    mounts
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .any(|source| source == disk || source.starts_with(disk))
+}
+
+/// Whether a console keymap of the given name exists under the kbd keymaps tree.
+fn keymap_exists(keymap: &str) -> bool {
+    fn search(dir: &Path, target: &str) -> bool {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if search(&path, target) {
+                    return true;
+                }
+            } else {
+                // keymaps are stored as "<name>.map.gz" (or ".map").
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name == format!("{target}.map.gz") || name == format!("{target}.map") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    search(Path::new("/usr/share/kbd/keymaps"), keymap)
 }
 
 /// Persist a configuration to disk (used by `--save-config`).

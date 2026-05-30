@@ -348,44 +348,7 @@ impl Wizard {
             .block(Block::default().borders(Borders::ALL).title(" DALI "));
         frame.render_widget(title, header);
 
-        let mut lines = Vec::with_capacity(self.fields.len() + 2);
-        for (i, field) in self.fields.iter().enumerate() {
-            let selected = i == self.selected;
-            let marker = if selected { "▶ " } else { "  " };
-            let label_style = if selected {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
-            };
-            let value_style = if selected {
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            let mut spans = vec![
-                Span::styled(format!("{marker}{:<16}", field.label), label_style),
-                Span::styled(Self::value_or_placeholder(field), value_style),
-            ];
-            // The most destructive fact in the tool stays visible regardless of
-            // focus or colour support.
-            if i == DISK {
-                spans.push(Span::styled(
-                    "  ← WILL BE ERASED",
-                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-                ));
-            }
-            lines.push(Line::from(spans));
-            if selected {
-                lines.push(Line::from(Span::styled(
-                    format!("                  {}", field.hint),
-                    Style::default().fg(Color::DarkGray),
-                )));
-            }
-        }
+        let mut lines = self.field_lines();
         if let Some(error) = &self.error {
             lines.push(Line::default());
             lines.push(Line::from(Span::styled(
@@ -394,13 +357,7 @@ impl Wizard {
             )));
         }
         if self.armed {
-            lines.push(Line::default());
-            lines.push(Line::from(Span::styled(
-                "  ▶ Press Enter again to START the installation (Esc to cancel)",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            )));
+            lines.extend(self.confirm_lines());
         }
 
         let form = Paragraph::new(lines).block(
@@ -416,6 +373,99 @@ impl Wizard {
         .style(Style::default().fg(Color::DarkGray))
         .block(Block::default().borders(Borders::ALL));
         frame.render_widget(help, footer);
+    }
+
+    /// One line per form field (plus a hint line under the focused one).
+    fn field_lines(&self) -> Vec<Line<'static>> {
+        let mut lines = Vec::with_capacity(self.fields.len() + 1);
+        for (i, field) in self.fields.iter().enumerate() {
+            let selected = i == self.selected;
+            let marker = if selected { "▶ " } else { "  " };
+            let label_style = if selected {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+            let value_style = Style::default().fg(Color::White).add_modifier(if selected {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            });
+            let mut spans = vec![
+                Span::styled(format!("{marker}{:<16}", field.label), label_style),
+                Span::styled(Self::value_or_placeholder(field), value_style),
+            ];
+            // The most destructive fact stays visible regardless of focus/colour.
+            if i == DISK {
+                spans.push(Span::styled(
+                    "  ← WILL BE ERASED",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ));
+            }
+            lines.push(Line::from(spans));
+            if selected {
+                lines.push(Line::from(Span::styled(
+                    format!("                  {}", field.hint),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+        }
+        lines
+    }
+
+    /// The pre-start confirmation summary shown once the form is armed.
+    fn confirm_lines(&self) -> Vec<Line<'static>> {
+        let root_state = if self.text(ROOT_PW).is_empty() {
+            "locked (sudo only)"
+        } else {
+            "password set"
+        };
+        let extras = self.text(EXTRA);
+        let extras = if extras.trim().is_empty() {
+            "none".to_owned()
+        } else {
+            extras.trim().to_owned()
+        };
+        let details = [
+            format!(
+                "hostname {} · user {}",
+                self.text(HOSTNAME),
+                self.text(USERNAME)
+            ),
+            format!(
+                "locale {} · keymap {} · tz {}",
+                self.text(LOCALE),
+                self.text(KEYMAP),
+                self.text(TIMEZONE)
+            ),
+            format!(
+                "root {root_state} · zram {} · extras {extras}",
+                self.pick_value(ZRAM)
+            ),
+        ];
+
+        let mut lines = vec![
+            Line::default(),
+            Line::from(Span::styled(
+                format!("  This will ERASE {} and install:", self.disk_value()),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )),
+        ];
+        lines.extend(details.into_iter().map(|detail| {
+            Line::from(Span::styled(
+                format!("      {detail}"),
+                Style::default().fg(Color::White),
+            ))
+        }));
+        lines.push(Line::from(Span::styled(
+            "  ▶ Press Enter again to START (Esc to cancel)",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines
     }
 
     fn value_or_placeholder(field: &Field) -> String {

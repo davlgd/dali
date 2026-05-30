@@ -6,9 +6,9 @@ spirit.
 
 ## Quality gate
 
-All of these must pass before a change lands. `scripts/ci.sh` runs them in a
-clean Arch container (a local/manual gate — there is no hosted CI pipeline
-configured yet):
+All of these must pass before a change lands. GitHub Actions runs this same
+gate on every push and pull request (see `.github/workflows/ci.yml`);
+`scripts/ci.sh` reproduces it locally in a clean Arch container:
 
 ```sh
 cargo fmt --check

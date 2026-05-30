@@ -16,10 +16,6 @@ use crate::error::{Error, Result};
 
 /// The fixed, opinionated technical choices that define a DALI install.
 pub mod stack {
-    /// Root filesystem. Btrfs gives us subvolumes and snapshots for free.
-    pub const FILESYSTEM: &str = "btrfs";
-    /// EFI System Partition filesystem.
-    pub const ESP_FILESYSTEM: &str = "fat32";
     /// Size of the EFI System Partition.
     pub const ESP_SIZE_MIB: u64 = 1024;
     /// The kernel package installed by default.

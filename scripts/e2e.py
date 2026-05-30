@@ -18,6 +18,7 @@ with bsdtar and the payload is built with `mkfs.ext4 -d` — no mounts, no sudo.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import select
@@ -251,13 +252,20 @@ def main() -> int:
     ap.add_argument("--dali", required=True, type=Path, help="path to the dali binary")
     ap.add_argument("--config", required=True, type=Path)
     ap.add_argument("--work", default=Path("e2e-work"), type=Path)
-    ap.add_argument("--hostname", default="dali-test")
+    ap.add_argument(
+        "--hostname",
+        default=None,
+        help="override the login hostname to wait for (defaults to the config's hostname, or 'arch')",
+    )
     args = ap.parse_args()
 
     require_tools()
+    # Phase 2 waits for "<hostname> login:"; derive it from the config so it
+    # cannot drift out of sync (the config default hostname is 'arch').
+    hostname = args.hostname or json.loads(args.config.read_text()).get("hostname", "arch")
     prepared = prepare(args.work, args.iso, args.dali, args.config)
     phase_install(prepared, args.work)
-    phase_boot(prepared, args.hostname, args.work)
+    phase_boot(prepared, hostname, args.work)
     log("\033[1;32mE2E PASSED\033[0m — real install booted successfully")
     return 0
 
