@@ -49,8 +49,11 @@ enum Kind {
     Text(String),
     /// Masked text (passwords).
     Secret(String),
-    /// One choice among several, cycled left/right.
+    /// A small set of options cycled left/right (e.g. the disk, zram on/off).
     Pick { options: Vec<String>, index: usize },
+    /// One value picked from a large list via a filterable popup (locale,
+    /// keymap, timezone) — type to filter, arrow-select, Enter to choose.
+    Choice { options: Vec<String>, index: usize },
 }
 
 /// A single editable row of the form.
@@ -85,6 +88,21 @@ impl Field {
         }
     }
 
+    /// A list-backed field; `initial` pre-selects a matching option if present.
+    fn choice(
+        label: &'static str,
+        hint: &'static str,
+        options: Vec<String>,
+        initial: &str,
+    ) -> Self {
+        let index = options.iter().position(|o| o == initial).unwrap_or(0);
+        Self {
+            label,
+            hint,
+            kind: Kind::Choice { options, index },
+        }
+    }
+
     /// The value shown to the user (secrets masked).
     fn display(&self) -> String {
         match &self.kind {
@@ -93,6 +111,7 @@ impl Field {
             Kind::Pick { options, index } => options
                 .get(*index)
                 .map_or_else(|| "<no devices found>".to_owned(), |o| format!("‹ {o} ›")),
+            Kind::Choice { options, index } => options.get(*index).cloned().unwrap_or_default(),
         }
     }
 }
@@ -111,6 +130,18 @@ const TIMEZONE: usize = 9;
 const ZRAM: usize = 10;
 const EXTRA: usize = 11;
 
+/// Open filterable-list state for a [`Kind::Choice`] field.
+struct Picker {
+    /// Index of the field being chosen.
+    field: usize,
+    /// Current filter text.
+    query: String,
+    /// Indices into the field's options that match `query`.
+    matches: Vec<usize>,
+    /// Cursor position within `matches`.
+    cursor: usize,
+}
+
 /// The wizard state machine.
 struct Wizard {
     fields: Vec<Field>,
@@ -124,6 +155,8 @@ struct Wizard {
     confirm: Option<String>,
     /// The validated config awaiting confirmation.
     pending: Option<InstallConfig>,
+    /// When `Some`, a filterable selection popup is open over the form.
+    picker: Option<Picker>,
 }
 
 impl Wizard {
@@ -160,9 +193,27 @@ impl Wizard {
             Field::secret("Confirm user pw", "re-type the user password"),
             Field::secret("Root password", "leave empty to lock root (sudo only)"),
             Field::secret("Confirm root pw", "re-type the root password"),
-            Field::text("Locale", "e.g. en_US.UTF-8", initial.locale),
-            Field::text("Keymap", "console keymap, e.g. us / fr", initial.keymap),
-            Field::text("Timezone", "e.g. Europe/Paris", initial.timezone),
+            // Locale / keymap / timezone are list-backed when the system exposes
+            // them (i.e. on the Arch ISO); free text otherwise so the wizard
+            // stays usable when rehearsing on another distro.
+            list_field(
+                "Locale",
+                "Enter to pick a locale",
+                probe::list_locales(),
+                &initial.locale,
+            ),
+            list_field(
+                "Keymap",
+                "Enter to pick a keymap",
+                probe::list_keymaps(),
+                &initial.keymap,
+            ),
+            list_field(
+                "Timezone",
+                "Enter to pick a timezone",
+                probe::list_timezones(),
+                &initial.timezone,
+            ),
             zram,
             Field::text(
                 "Extra packages",
@@ -177,6 +228,7 @@ impl Wizard {
             error: None,
             confirm: None,
             pending: None,
+            picker: None,
         }
     }
 
@@ -198,6 +250,12 @@ impl Wizard {
                 return Ok(None);
             }
 
+            // The filterable picker, when open, captures all keys.
+            if self.picker.is_some() {
+                self.handle_picker_key(key.code);
+                continue;
+            }
+
             // In the confirmation modal, keys drive the confirmation input only.
             if self.confirm.is_some() {
                 if let Some(config) = self.handle_confirm_key(key.code) {
@@ -213,6 +271,20 @@ impl Wizard {
 
             // Any keypress clears a stale validation message.
             self.error = None;
+
+            // On a list-backed field, Enter or typing opens the filter popup.
+            let on_choice = matches!(self.fields[self.selected].kind, Kind::Choice { .. });
+            if on_choice {
+                match key.code {
+                    KeyCode::Up | KeyCode::BackTab => self.select(Dir::Prev),
+                    KeyCode::Down | KeyCode::Tab => self.select(Dir::Next),
+                    KeyCode::Enter => self.open_picker(None),
+                    KeyCode::Char(c) if !c.is_control() => self.open_picker(Some(c)),
+                    _ => {}
+                }
+                continue;
+            }
+
             match key.code {
                 KeyCode::Up | KeyCode::BackTab => self.select(Dir::Prev),
                 KeyCode::Down | KeyCode::Tab => self.select(Dir::Next),
@@ -233,6 +305,69 @@ impl Wizard {
                 _ => {}
             }
         }
+    }
+
+    /// Open the filterable picker for the focused [`Kind::Choice`] field,
+    /// optionally seeding the filter with a first character.
+    fn open_picker(&mut self, seed: Option<char>) {
+        let query: String = seed.into_iter().collect();
+        let mut picker = Picker {
+            field: self.selected,
+            query,
+            matches: Vec::new(),
+            cursor: 0,
+        };
+        self.recompute_matches(&mut picker);
+        self.picker = Some(picker);
+    }
+
+    /// Recompute the filtered match list (case-insensitive substring).
+    fn recompute_matches(&self, picker: &mut Picker) {
+        let needle = picker.query.to_lowercase();
+        if let Kind::Choice { options, .. } = &self.fields[picker.field].kind {
+            picker.matches = options
+                .iter()
+                .enumerate()
+                .filter(|(_, opt)| opt.to_lowercase().contains(&needle))
+                .map(|(i, _)| i)
+                .collect();
+        }
+        picker.cursor = picker.cursor.min(picker.matches.len().saturating_sub(1));
+    }
+
+    /// Handle a key while the selection picker is open.
+    fn handle_picker_key(&mut self, code: KeyCode) {
+        let Some(mut picker) = self.picker.take() else {
+            return;
+        };
+        match code {
+            KeyCode::Esc => return, // dropped: closes without changing the field
+            KeyCode::Up => picker.cursor = picker.cursor.saturating_sub(1),
+            KeyCode::Down => {
+                if picker.cursor + 1 < picker.matches.len() {
+                    picker.cursor += 1;
+                }
+            }
+            KeyCode::Backspace => {
+                picker.query.pop();
+                self.recompute_matches(&mut picker);
+            }
+            KeyCode::Char(c) if !c.is_control() => {
+                picker.query.push(c);
+                self.recompute_matches(&mut picker);
+            }
+            KeyCode::Enter => {
+                if let Some(&opt_index) = picker.matches.get(picker.cursor)
+                    && let Kind::Choice { index, .. } = &mut self.fields[picker.field].kind
+                {
+                    *index = opt_index;
+                }
+                self.select(Dir::Next); // picker closes (not put back) and we advance
+                return;
+            }
+            _ => {}
+        }
+        self.picker = Some(picker);
     }
 
     /// Handle a key while the confirmation modal is open. Returns the config to
@@ -290,7 +425,7 @@ impl Wizard {
             Kind::Text(value) | Kind::Secret(value) => {
                 value.pop();
             }
-            Kind::Pick { .. } => {}
+            Kind::Pick { .. } | Kind::Choice { .. } => {}
         }
     }
 
@@ -300,7 +435,7 @@ impl Wizard {
         }
         match &mut self.fields[self.selected].kind {
             Kind::Text(value) | Kind::Secret(value) => value.push(c),
-            Kind::Pick { .. } => {}
+            Kind::Pick { .. } | Kind::Choice { .. } => {}
         }
     }
 
@@ -349,10 +484,11 @@ impl Wizard {
         }
     }
 
-    /// Raw string value of a text/secret field (empty for a Pick).
+    /// The current string value of a text/secret/choice field (empty for a Pick).
     fn text(&self, index: usize) -> String {
         match &self.fields[index].kind {
             Kind::Text(value) | Kind::Secret(value) => value.clone(),
+            Kind::Choice { options, index } => options.get(*index).cloned().unwrap_or_default(),
             Kind::Pick { .. } => String::new(),
         }
     }
@@ -366,6 +502,7 @@ impl Wizard {
                 .and_then(|o| o.split_whitespace().next())
                 .unwrap_or_default()
                 .to_owned(),
+            Kind::Choice { options, index } => options.get(*index).cloned().unwrap_or_default(),
             Kind::Secret(_) => String::new(),
         }
     }
@@ -406,7 +543,7 @@ impl Wizard {
         frame.render_widget(form, body);
 
         let help = Paragraph::new(
-            "↑↓/Tab move   ←→ change option   type to edit   Enter next/confirm   Esc back/quit",
+            "↑↓/Tab move   ←→ change option   Enter edit/pick from list   Esc back/quit",
         )
         .style(Style::default().fg(Color::Gray))
         .block(Block::default().borders(Borders::ALL));
@@ -417,6 +554,76 @@ impl Wizard {
         if self.confirm.is_some() {
             self.draw_confirm_modal(frame);
         }
+        if let Some(picker) = &self.picker {
+            self.draw_picker_modal(frame, picker);
+        }
+    }
+
+    /// Render the filterable selection popup for a Choice field.
+    fn draw_picker_modal(&self, frame: &mut Frame<'_>, picker: &Picker) {
+        const VISIBLE: usize = 10;
+        let field = &self.fields[picker.field];
+        let Kind::Choice { options, .. } = &field.kind else {
+            return;
+        };
+
+        // height = VISIBLE rows + filter line + 2 borders + 1 slack.
+        let area = centered_rect(frame.area(), 50, 14);
+        frame.render_widget(Clear, area);
+
+        let mut lines = vec![Line::from(vec![
+            Span::styled("filter: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                picker.query.clone(),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(
+                    "   ({} match{})",
+                    picker.matches.len(),
+                    if picker.matches.len() == 1 { "" } else { "es" }
+                ),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ])];
+
+        // Show a window of results around the cursor.
+        let start = picker
+            .cursor
+            .saturating_sub(VISIBLE - 1)
+            .min(picker.matches.len().saturating_sub(VISIBLE));
+        for (row, &opt_index) in picker.matches.iter().enumerate().skip(start).take(VISIBLE) {
+            let focused = row == picker.cursor;
+            let marker = if focused { "▶ " } else { "  " };
+            let style = if focused {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            lines.push(Line::from(Span::styled(
+                format!("{marker}{}", options[opt_index]),
+                style,
+            )));
+        }
+        if picker.matches.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "  (no match)",
+                Style::default().fg(Color::Red),
+            )));
+        }
+
+        let modal = Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" Select {} — ↑↓ Enter, Esc cancel ", field.label))
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
+        frame.render_widget(modal, area);
     }
 
     /// Render the centered confirmation popup over the form.
@@ -555,6 +762,25 @@ fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
     vertical
 }
 
+/// Build a list-backed [`Kind::Choice`] field, falling back to free text when
+/// the system list is empty (e.g. running off-Arch), so the wizard always works.
+fn list_field(
+    label: &'static str,
+    hint: &'static str,
+    options: Vec<String>,
+    initial: &str,
+) -> Field {
+    if options.is_empty() {
+        Field::text(
+            label,
+            "type a value (system list unavailable)",
+            initial.to_owned(),
+        )
+    } else {
+        Field::choice(label, hint, options, initial)
+    }
+}
+
 /// Parse a comma-separated package list, trimming whitespace and dropping empties.
 fn parse_packages(input: &str) -> Vec<String> {
     input
@@ -591,6 +817,7 @@ mod tests {
             error: None,
             confirm: None,
             pending: None,
+            picker: None,
         };
         assert_eq!(wizard.disk_value(), "/dev/vda");
     }
@@ -605,6 +832,55 @@ mod tests {
         assert_eq!(field.display(), "•".repeat(7));
     }
 
+    fn choice_wizard() -> Wizard {
+        Wizard {
+            fields: vec![
+                Field::choice(
+                    "Locale",
+                    "",
+                    vec![
+                        "en_US.UTF-8".to_owned(),
+                        "fr_FR.UTF-8".to_owned(),
+                        "de_DE.UTF-8".to_owned(),
+                    ],
+                    "en_US.UTF-8",
+                ),
+                Field::text("Hostname", "", String::new()),
+            ],
+            selected: 0,
+            error: None,
+            confirm: None,
+            pending: None,
+            picker: None,
+        }
+    }
+
+    #[test]
+    fn picker_filters_and_selects() {
+        let mut w = choice_wizard();
+        assert_eq!(w.text(0), "en_US.UTF-8"); // pre-selected default
+
+        w.open_picker(None);
+        w.handle_picker_key(KeyCode::Char('f'));
+        w.handle_picker_key(KeyCode::Char('r'));
+        // "fr" matches only the French locale.
+        assert_eq!(w.picker.as_ref().unwrap().matches.len(), 1);
+
+        w.handle_picker_key(KeyCode::Enter);
+        assert!(w.picker.is_none(), "Enter closes the picker");
+        assert_eq!(w.text(0), "fr_FR.UTF-8", "selection applied");
+        assert_eq!(w.selected, 1, "focus advances after picking");
+    }
+
+    #[test]
+    fn picker_escape_keeps_original_value() {
+        let mut w = choice_wizard();
+        w.open_picker(Some('d'));
+        w.handle_picker_key(KeyCode::Esc);
+        assert!(w.picker.is_none());
+        assert_eq!(w.text(0), "en_US.UTF-8", "Esc cancels without changing");
+    }
+
     #[test]
     fn move_selection_wraps_around() {
         let mut wizard = Wizard {
@@ -616,6 +892,7 @@ mod tests {
             error: None,
             confirm: None,
             pending: None,
+            picker: None,
         };
         wizard.select(Dir::Prev);
         assert_eq!(wizard.selected, 1);

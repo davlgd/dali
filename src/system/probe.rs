@@ -157,9 +157,113 @@ fn read_model(base: &Path) -> Option<String> {
     }
 }
 
+/// Available UTF-8 glibc locales, e.g. `en_US.UTF-8`, sorted. Empty off Arch.
+pub fn list_locales() -> Vec<String> {
+    std::fs::read_to_string("/usr/share/i18n/SUPPORTED")
+        .map(|s| parse_locales(&s))
+        .unwrap_or_default()
+}
+
+/// Parse glibc's `SUPPORTED` file, keeping the UTF-8 locale identifiers.
+fn parse_locales(supported: &str) -> Vec<String> {
+    let mut locales: Vec<String> = supported
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let name = parts.next()?;
+            // Second column is the charset; we only support UTF-8 installs.
+            (parts.next() == Some("UTF-8")).then(|| name.to_owned())
+        })
+        .collect();
+    locales.sort();
+    locales.dedup();
+    locales
+}
+
+/// Available console keymaps, e.g. `fr`, `us`, `uk`, sorted. Empty off Arch.
+pub fn list_keymaps() -> Vec<String> {
+    let mut keymaps = Vec::new();
+    collect_keymaps(Path::new("/usr/share/kbd/keymaps"), &mut keymaps);
+    keymaps.sort();
+    keymaps.dedup();
+    keymaps
+}
+
+fn collect_keymaps(dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_keymaps(&path, out);
+        } else if let Some(name) = keymap_name(&entry.file_name().to_string_lossy()) {
+            out.push(name.to_owned());
+        }
+    }
+}
+
+/// The keymap name from a file like `fr.map.gz` → `fr` (None if not a keymap).
+fn keymap_name(filename: &str) -> Option<&str> {
+    filename
+        .strip_suffix(".map.gz")
+        .or_else(|| filename.strip_suffix(".map"))
+}
+
+/// Available timezones in `Region/City` form, e.g. `Europe/Paris`, sorted.
+/// Empty off Arch.
+pub fn list_timezones() -> Vec<String> {
+    // zone1970.tab is the canonical, clean list (one TZ per relevant line);
+    // fall back to the older zone.tab.
+    let table = std::fs::read_to_string("/usr/share/zoneinfo/zone1970.tab")
+        .or_else(|_| std::fs::read_to_string("/usr/share/zoneinfo/zone.tab"))
+        .unwrap_or_default();
+    parse_timezones(&table)
+}
+
+/// Parse a `zone.tab`/`zone1970.tab` file: the timezone is the 3rd tab field.
+fn parse_timezones(table: &str) -> Vec<String> {
+    let mut zones: Vec<String> = table
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split('\t').nth(2))
+        .map(ToOwned::to_owned)
+        .collect();
+    zones.push("UTC".to_owned());
+    zones.sort();
+    zones.dedup();
+    zones
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_locales_keeps_only_utf8_identifiers() {
+        let supported = "en_US.UTF-8 UTF-8\nen_US ISO-8859-1\nfr_FR.UTF-8 UTF-8\n# comment\n";
+        assert_eq!(parse_locales(supported), ["en_US.UTF-8", "fr_FR.UTF-8"]);
+    }
+
+    #[test]
+    fn keymap_name_strips_extensions() {
+        assert_eq!(keymap_name("fr.map.gz"), Some("fr"));
+        assert_eq!(keymap_name("us.map"), Some("us"));
+        assert_eq!(keymap_name("README"), None);
+    }
+
+    #[test]
+    fn parse_timezones_takes_third_field_and_adds_utc() {
+        let table = "#code\tcoordinates\tTZ\tcomments\n\
+                     FR\t+4852+00220\tEurope/Paris\n\
+                     JP\t+353916+1394441\tAsia/Tokyo\n";
+        let zones = parse_timezones(table);
+        assert!(zones.contains(&"Europe/Paris".to_owned()));
+        assert!(zones.contains(&"Asia/Tokyo".to_owned()));
+        assert!(zones.contains(&"UTC".to_owned()));
+        // sorted
+        assert!(zones.windows(2).all(|w| w[0] <= w[1]));
+    }
 
     #[test]
     fn size_human_formats_gib() {

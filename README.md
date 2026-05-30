@@ -119,7 +119,10 @@ happens exclusively through the sudo-enabled user. The config contains
 plaintext passwords — treat any saved file as a secret.
 
 The interactive TUI gathers every one of these fields, including the zram
-toggle and extra packages, and re-asks each password for confirmation.
+toggle and extra packages, and re-asks each password for confirmation. Locale,
+keymap and timezone are **picked from a filterable list** of what the system
+actually supports (press Enter on the field, type to filter, arrow-select) — no
+need to remember exact identifiers.
 
 ## Building
 
