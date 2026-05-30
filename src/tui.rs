@@ -349,10 +349,8 @@ impl Wizard {
         match code {
             KeyCode::Esc => return, // dropped: closes without changing the field
             KeyCode::Up => picker.cursor = picker.cursor.saturating_sub(1),
-            KeyCode::Down => {
-                if picker.cursor + 1 < picker.matches.len() {
-                    picker.cursor += 1;
-                }
+            KeyCode::Down if picker.cursor + 1 < picker.matches.len() => {
+                picker.cursor += 1;
             }
             KeyCode::Backspace => {
                 picker.query.pop();
