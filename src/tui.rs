@@ -465,6 +465,9 @@ impl Wizard {
             timezone: self.text(TIMEZONE),
             zram_swap: self.pick_value(ZRAM) == "yes",
             extra_packages: parse_packages(&self.text(EXTRA)),
+            // default_apps / provision keep their defaults (on); they are not
+            // (yet) exposed in the wizard.
+            ..InstallConfig::default()
         };
 
         match config.validate() {

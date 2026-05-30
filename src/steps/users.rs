@@ -25,13 +25,20 @@ impl Step for Users {
             set_password(ctx, "root", config.root_password.expose())?;
         }
 
+        // The `docker` group (created by the docker package) lets the user run
+        // docker without sudo; only meaningful when the app set is installed.
+        let groups = if config.default_apps {
+            "wheel,docker"
+        } else {
+            "wheel"
+        };
         let username = &config.user.username;
-        ctx.info(format!("creating user {username} (group wheel)"));
+        ctx.info(format!("creating user {username} (groups {groups})"));
         ctx.sys.run(
             &Command::new("useradd")
                 .arg("--create-home")
                 .arg("--groups")
-                .arg("wheel")
+                .arg(groups)
                 .arg("--shell")
                 .arg("/bin/bash")
                 .arg(username)

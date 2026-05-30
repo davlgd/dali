@@ -15,7 +15,12 @@ impl Step for Services {
     }
 
     fn run(&self, ctx: &mut Context<'_>) -> Result<()> {
-        for service in stack::SERVICES {
+        let app_services = if ctx.config.default_apps {
+            stack::APP_SERVICES
+        } else {
+            &[]
+        };
+        for service in stack::SERVICES.iter().chain(app_services) {
             ctx.info(format!("enabling {service}"));
             ctx.sys.run(
                 &Command::new("systemctl")

@@ -32,7 +32,7 @@ pub mod stack {
         ("@pkg", "/var/cache/pacman/pkg"),
         ("@snapshots", "/.snapshots"),
     ];
-    /// Base packages every install receives.
+    /// Base packages every install receives — the bootable minimum.
     pub const BASE_PACKAGES: &[&str] = &[
         "base",
         "linux",
@@ -43,16 +43,43 @@ pub mod stack {
         "vim",
         "git",
         "base-devel",
+        "curl",
     ];
-    /// Services enabled in the installed system. `systemd-boot-update` keeps
-    /// the ESP copy of systemd-boot current across future systemd upgrades;
-    /// `fstrim.timer` runs periodic TRIM, recommended for SSD/NVMe.
+    /// Curated application set installed by default (official repos), on top of
+    /// [`BASE_PACKAGES`]. Toggled by `InstallConfig::default_apps`.
+    pub const DEFAULT_APPS: &[&str] = &[
+        "nano",
+        "bash-completion",
+        "atuin",
+        "bat",
+        "zellij",
+        "jq",
+        "jless",
+        "yt-dlp",
+        "ffmpeg",
+        "lazygit",
+        "lazydocker",
+        "glab",
+        "docker",
+        "docker-buildx",
+        "avahi",
+        "impala",
+        "minio-client",
+    ];
+    /// AUR packages installed during provisioning (needs an AUR helper).
+    pub const AUR_PACKAGES: &[&str] = &["pamac-aur"];
+    /// Base services enabled in every install. `systemd-boot-update` keeps the
+    /// ESP copy of systemd-boot current across upgrades; `fstrim.timer` runs
+    /// periodic TRIM (SSD/NVMe).
     pub const SERVICES: &[&str] = &[
         "NetworkManager",
         "systemd-timesyncd",
         "systemd-boot-update.service",
         "fstrim.timer",
     ];
+    /// Services enabled only when the default app set is installed (their
+    /// units ship with `docker` / `avahi`).
+    pub const APP_SERVICES: &[&str] = &["docker.service", "avahi-daemon.service"];
 }
 
 /// A secret string (e.g. a password) that never reveals itself in `Debug`
@@ -129,6 +156,12 @@ pub struct InstallConfig {
     pub extra_packages: Vec<String>,
     /// Enable a compressed RAM swap device (zram) sized to available memory.
     pub zram_swap: bool,
+    /// Install the curated [`stack::DEFAULT_APPS`] set and enable their services
+    /// (docker, avahi). Disable for a bare bootable system.
+    pub default_apps: bool,
+    /// Run the post-install provisioning: AUR packages ([`stack::AUR_PACKAGES`])
+    /// and the `mise` / Claude Code installers. Best-effort and network-bound.
+    pub provision: bool,
 }
 
 impl Default for InstallConfig {
@@ -146,6 +179,8 @@ impl Default for InstallConfig {
             root_password: Secret::default(),
             extra_packages: Vec::new(),
             zram_swap: true,
+            default_apps: true,
+            provision: true,
         }
     }
 }
@@ -164,8 +199,9 @@ impl InstallConfig {
         Ok(serde_json::to_string_pretty(self)?)
     }
 
-    /// All packages to install: the fixed base set, the zram tooling when
-    /// enabled, plus user extras — all de-duplicated and order-preserving.
+    /// All packages installed by `pacstrap`: the base set, the curated app set
+    /// (when enabled), the zram tooling, plus user extras — de-duplicated and
+    /// order-preserving.
     pub fn all_packages(&self) -> Vec<String> {
         let mut packages: Vec<String> = stack::BASE_PACKAGES
             .iter()
@@ -176,6 +212,11 @@ impl InstallConfig {
                 packages.push(pkg.to_owned());
             }
         };
+        if self.default_apps {
+            for app in stack::DEFAULT_APPS {
+                push_unique(&mut packages, app);
+            }
+        }
         if self.zram_swap {
             push_unique(&mut packages, "zram-generator");
         }

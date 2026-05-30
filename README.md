@@ -32,15 +32,29 @@ the zram toggle and any **extra packages**. Everything else is decided for you.
 More precisely, every install gets:
 
 - **Base packages**: `base`, `linux`, `linux-firmware`, `btrfs-progs`,
-  `networkmanager`, `sudo`, `vim`, `git`, `base-devel` — plus the matching CPU
-  microcode (`intel-ucode`/`amd-ucode`), `zram-generator` when zram is on, and
-  any extras you list.
+  `networkmanager`, `sudo`, `vim`, `git`, `base-devel`, `curl` — plus the
+  matching CPU microcode (`intel-ucode`/`amd-ucode`), `zram-generator` when zram
+  is on, and any extras you list.
+- **Default app set** (`default_apps`, on by default): `nano`,
+  `bash-completion`, `atuin`, `bat`, `zellij`, `jq`, `jless`, `yt-dlp`,
+  `ffmpeg`, `lazygit`, `lazydocker`, `glab`, `docker`, `docker-buildx`,
+  `avahi`, `impala`, `minio-client` — with `docker.service` and
+  `avahi-daemon.service` enabled and the user added to the `docker` group.
+- **Provisioning** (`provision`, on by default, best-effort): the `pamac-aur`
+  AUR package (via a bootstrapped `paru`), plus the
+  [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
+  installers run as your user. Network-bound; failures are reported as warnings
+  and never abort the (already bootable) install.
 - **ESP**: FAT32, 1 GiB, mounted at `/boot`.
-- **Services enabled**: `NetworkManager`, `systemd-timesyncd`,
+- **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.
 - **Omitted-field defaults**: `hostname=arch`, `timezone=UTC`,
-  `locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, and root **locked**
-  (empty `root_password`).
+  `locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, `default_apps=true`,
+  `provision=true`, and root **locked** (empty `root_password`).
+
+Set `"default_apps": false` for a bare bootable system, or `"provision": false`
+to skip the AUR/`mise`/Claude Code step. When a real install finishes, DALI
+**offers to reboot** straight into the new system.
 
 ## Install
 

@@ -12,6 +12,7 @@ mod fstab;
 mod initramfs;
 mod localization;
 mod partition;
+mod provision;
 mod services;
 mod storage;
 mod users;
@@ -58,6 +59,7 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
         Box::new(bootloader::Bootloader),
         Box::new(users::Users),
         Box::new(services::Services),
+        Box::new(provision::Provision),
     ]
 }
 
@@ -124,6 +126,7 @@ mod tests {
                 "Install bootloader",
                 "Create users",
                 "Enable services",
+                "Provision extras (AUR, mise, Claude Code)",
             ]
         );
     }

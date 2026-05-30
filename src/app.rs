@@ -63,9 +63,56 @@ pub fn run(cli: &Cli) -> Result<()> {
     if cli.dry_run {
         println!("\nDry run complete. Re-run without --dry-run to install.");
     } else {
-        println!("\nInstallation complete. You can reboot into your new system.");
+        let offer = if cli.yes {
+            RebootOffer::Skip
+        } else {
+            RebootOffer::Ask
+        };
+        finish_install(offer, sys.as_ref());
     }
     Ok(())
+}
+
+/// Whether to offer an interactive reboot after a real install.
+#[derive(Clone, Copy)]
+enum RebootOffer {
+    /// Interactive run: ask the user.
+    Ask,
+    /// Non-interactive (`--yes`): never reboot automatically.
+    Skip,
+}
+
+/// Report success and, on an interactive install, offer to reboot straight into
+/// the new system rather than just returning to the shell.
+fn finish_install(offer: RebootOffer, sys: &dyn Sys) {
+    println!("\nInstallation complete.");
+    match offer {
+        RebootOffer::Skip => {
+            println!("Reboot into your new system when ready (e.g. `reboot`).");
+        }
+        RebootOffer::Ask => match prompt_yes_no("Reboot now into your new system?") {
+            Ok(true) => {
+                println!("Rebooting…");
+                // If this succeeds the process goes away with the machine; if it
+                // somehow returns, fall through with a hint.
+                let _ = sys.run(&crate::system::Command::new("systemctl").arg("reboot"));
+                println!("Could not trigger reboot automatically; run `reboot` yourself.");
+            }
+            _ => println!("Reboot into your new system when ready (e.g. `reboot`)."),
+        },
+    }
+}
+
+/// Prompt a `[y/N]` question on the console (defaults to no).
+fn prompt_yes_no(question: &str) -> Result<bool> {
+    print!("{question} [y/N]: ");
+    io::stdout().flush().map_err(|e| Error::io("<stdout>", e))?;
+    let mut answer = String::new();
+    io::stdin()
+        .read_line(&mut answer)
+        .map_err(|e| Error::io("<stdin>", e))?;
+    let answer = answer.trim().to_ascii_lowercase();
+    Ok(answer == "y" || answer == "yes")
 }
 
 /// Verify the live environment can support an install.

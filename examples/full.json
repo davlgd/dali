@@ -7,5 +7,7 @@
   "user": { "username": "david", "password": "changeme" },
   "root_password": "",
   "extra_packages": ["htop"],
-  "zram_swap": true
+  "zram_swap": true,
+  "default_apps": true,
+  "provision": true
 }
