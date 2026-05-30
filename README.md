@@ -35,7 +35,7 @@ More precisely, every install gets:
   `networkmanager`, `sudo`, `vim`, `git`, `base-devel`, `curl` — plus the
   matching CPU microcode (`intel-ucode`/`amd-ucode`), `zram-generator` when zram
   is on, and any extras you list.
-- **Default app set** (`default_apps`, on by default): `nano`,
+- **Default app set** (`default_apps`, on by default): `nano`, `less`,
   `bash-completion`, `atuin`, `bat`, `zellij`, `jq`, `jless`, `yt-dlp`,
   `ffmpeg`, `lazygit`, `lazydocker`, `glab`, `docker`, `docker-buildx`,
   `avahi`, `impala`, `minio-client`, `uv`, `openssh`, `whois` — with

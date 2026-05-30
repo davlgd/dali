@@ -49,6 +49,7 @@ pub mod stack {
     /// [`BASE_PACKAGES`]. Toggled by `InstallConfig::default_apps`.
     pub const DEFAULT_APPS: &[&str] = &[
         "nano",
+        "less",
         "bash-completion",
         "atuin",
         "bat",
