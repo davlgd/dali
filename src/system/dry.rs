@@ -52,6 +52,13 @@ impl Sys for DrySys {
         Ok(())
     }
 
+    fn append(&self, path: &str, contents: &str) -> Result<()> {
+        let bytes = contents.len();
+        let lines = contents.lines().count();
+        self.record(format!("append: {path} ({bytes} bytes, {lines} lines)"));
+        Ok(())
+    }
+
     fn is_real(&self) -> bool {
         false
     }

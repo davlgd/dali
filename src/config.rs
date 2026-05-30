@@ -65,6 +65,10 @@ pub mod stack {
         "avahi",
         "impala",
         "minio-client",
+        "uv",
+        "wl-clipboard",
+        "xclip",
+        "openssh",
     ];
     /// AUR packages installed during provisioning (needs an AUR helper).
     pub const AUR_PACKAGES: &[&str] = &["pamac-aur"];
@@ -79,7 +83,7 @@ pub mod stack {
     ];
     /// Services enabled only when the default app set is installed (their
     /// units ship with `docker` / `avahi`).
-    pub const APP_SERVICES: &[&str] = &["docker.service", "avahi-daemon.service"];
+    pub const APP_SERVICES: &[&str] = &["docker.service", "avahi-daemon.service", "sshd.service"];
 }
 
 /// A secret string (e.g. a password) that never reveals itself in `Debug`
@@ -152,6 +156,10 @@ pub struct InstallConfig {
     /// Root password. If empty, the root account is locked and administration
     /// happens exclusively through the sudo-enabled [`Self::user`].
     pub root_password: Secret,
+    /// Optional GitHub username. When set, that account's public keys
+    /// (`https://github.com/<user>.keys`) are imported as the user's accepted
+    /// SSH keys. Empty means "don't import".
+    pub github_user: String,
     /// Extra packages to install on top of [`stack::BASE_PACKAGES`].
     pub extra_packages: Vec<String>,
     /// Enable a compressed RAM swap device (zram) sized to available memory.
@@ -177,6 +185,7 @@ impl Default for InstallConfig {
                 password: Secret::default(),
             },
             root_password: Secret::default(),
+            github_user: String::new(),
             extra_packages: Vec::new(),
             zram_swap: true,
             default_apps: true,
@@ -255,7 +264,24 @@ impl InstallConfig {
         for package in &self.extra_packages {
             validate_package_name(package)?;
         }
+        if !self.github_user.is_empty() {
+            validate_github_user(&self.github_user)?;
+        }
         Ok(())
+    }
+}
+
+/// GitHub usernames: 1–39 chars, alphanumeric or single hyphens, not
+/// starting/ending with a hyphen. Validated so the `.keys` URL is well-formed.
+fn validate_github_user(name: &str) -> Result<()> {
+    let valid = (1..=39).contains(&name.len())
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && !name.starts_with('-')
+        && !name.ends_with('-');
+    if valid {
+        Ok(())
+    } else {
+        Err(Error::Config(format!("invalid GitHub username `{name}`")))
     }
 }
 

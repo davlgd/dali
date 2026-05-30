@@ -6,6 +6,7 @@
   "keymap": "fr",
   "user": { "username": "david", "password": "changeme" },
   "root_password": "",
+  "github_user": "davlgd",
   "extra_packages": ["htop"],
   "zram_swap": true,
   "default_apps": true,

@@ -70,7 +70,19 @@ impl Step for Provision {
             );
         }
 
-        // 2. Per-user tool installers (write into the user's home).
+        // 2. Build the V compiler from source and symlink it into ~/.local/bin.
+        best_effort(
+            ctx,
+            "building the V compiler",
+            &user_sh(
+                &user,
+                "mkdir -p ~/.local/bin && rm -rf ~/v && \
+                 git clone --depth=1 https://github.com/vlang/v ~/v && \
+                 cd ~/v && make && ./v symlink ~/.local/bin",
+            ),
+        );
+
+        // 3. Per-user tool installers (write into the user's home).
         best_effort(
             ctx,
             "installing mise",

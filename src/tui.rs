@@ -129,6 +129,7 @@ const KEYMAP: usize = 8;
 const TIMEZONE: usize = 9;
 const ZRAM: usize = 10;
 const EXTRA: usize = 11;
+const GITHUB: usize = 12;
 
 /// Open filterable-list state for a [`Kind::Choice`] field.
 struct Picker {
@@ -219,6 +220,11 @@ impl Wizard {
                 "Extra packages",
                 "optional, comma-separated",
                 initial.extra_packages.join(", "),
+            ),
+            Field::text(
+                "GitHub user",
+                "optional — imports github.com/<user>.keys as SSH keys",
+                initial.github_user,
             ),
         ];
 
@@ -465,6 +471,7 @@ impl Wizard {
             timezone: self.text(TIMEZONE),
             zram_swap: self.pick_value(ZRAM) == "yes",
             extra_packages: parse_packages(&self.text(EXTRA)),
+            github_user: self.text(GITHUB).trim().to_owned(),
             // default_apps / provision keep their defaults (on); they are not
             // (yet) exposed in the wizard.
             ..InstallConfig::default()
@@ -631,7 +638,7 @@ impl Wizard {
 
     /// Render the centered confirmation popup over the form.
     fn draw_confirm_modal(&self, frame: &mut Frame<'_>) {
-        let area = centered_rect(frame.area(), 64, 13);
+        let area = centered_rect(frame.area(), 64, 15);
         frame.render_widget(Clear, area);
         let modal = Paragraph::new(self.confirm_lines())
             .wrap(Wrap { trim: false })
@@ -722,6 +729,14 @@ impl Wizard {
             Line::from(format!(
                 "  root {root_state} · zram {} · extras {extras}",
                 self.pick_value(ZRAM)
+            )),
+            Line::from(format!(
+                "  ssh keys {}",
+                if self.text(GITHUB).trim().is_empty() {
+                    "none".to_owned()
+                } else {
+                    format!("github.com/{}", self.text(GITHUB).trim())
+                }
             )),
             Line::default(),
             Line::from(Span::styled(

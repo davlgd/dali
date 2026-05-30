@@ -38,10 +38,19 @@ More precisely, every install gets:
 - **Default app set** (`default_apps`, on by default): `nano`,
   `bash-completion`, `atuin`, `bat`, `zellij`, `jq`, `jless`, `yt-dlp`,
   `ffmpeg`, `lazygit`, `lazydocker`, `glab`, `docker`, `docker-buildx`,
-  `avahi`, `impala`, `minio-client` — with `docker.service` and
-  `avahi-daemon.service` enabled and the user added to the `docker` group.
+  `avahi`, `impala`, `minio-client`, `uv`, `wl-clipboard`, `xclip`, `openssh`
+  — with `docker.service`, `avahi-daemon.service` and `sshd.service` enabled and
+  the user added to the `docker` group.
+- **SSH keys** (optional, `github_user`): when set, that GitHub account's public
+  keys (`https://github.com/<user>.keys`) are imported as the user's accepted
+  SSH keys (`~/.ssh/authorized_keys`).
+- **Shell environment**: the user's `~/.bashrc` gets a set of aliases and helper
+  functions (`mkcd`, `gac`, `gl`, `gst`, `dps`, `myip`, `w`, `check`, …),
+  `~/.local/bin` on `PATH`, and `pbcopy`/`pbpaste` shims mapped onto
+  `wl-clipboard`/`xclip`/`xsel`.
 - **Provisioning** (`provision`, on by default, best-effort): the `pamac-aur`
-  AUR package (via a bootstrapped `paru`), plus the
+  AUR package (via a bootstrapped `paru`), the [V compiler](https://vlang.io)
+  built from source into `~/.local/bin`, plus the
   [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
   installers run as your user. Network-bound; failures are reported as warnings
   and never abort the (already bootable) install.

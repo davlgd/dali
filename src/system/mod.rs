@@ -129,6 +129,10 @@ pub trait Sys {
     /// Create a directory and all missing parents on the live system.
     fn mkdir_p(&self, path: &str) -> Result<()>;
 
+    /// Append `contents` to `path`, creating it (and parents) if missing,
+    /// without disturbing existing content (used for `~/.bashrc`).
+    fn append(&self, path: &str, contents: &str) -> Result<()>;
+
     /// Whether this implementation actually performs effects. `false` for
     /// dry-runs, used to skip steps that only make sense for real installs.
     fn is_real(&self) -> bool;

@@ -14,6 +14,8 @@ mod localization;
 mod partition;
 mod provision;
 mod services;
+mod shell;
+mod ssh_keys;
 mod storage;
 mod users;
 
@@ -58,6 +60,8 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
         Box::new(initramfs::Initramfs),
         Box::new(bootloader::Bootloader),
         Box::new(users::Users),
+        Box::new(shell::ShellSetup),
+        Box::new(ssh_keys::ImportSshKeys),
         Box::new(services::Services),
         Box::new(provision::Provision),
     ]
@@ -125,6 +129,8 @@ mod tests {
                 "Build initramfs",
                 "Install bootloader",
                 "Create users",
+                "Configure shell environment",
+                "Import GitHub SSH keys",
                 "Enable services",
                 "Provision extras (AUR, mise, Claude Code)",
             ]

@@ -99,6 +99,20 @@ impl Sys for RealSys {
         std::fs::create_dir_all(path).map_err(|e| Error::io(path, e))
     }
 
+    fn append(&self, path: &str, contents: &str) -> Result<()> {
+        use std::io::Write as _;
+        if let Some(parent) = Path::new(path).parent() {
+            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|e| Error::io(path, e))?;
+        file.write_all(contents.as_bytes())
+            .map_err(|e| Error::io(path, e))
+    }
+
     fn is_real(&self) -> bool {
         true
     }
