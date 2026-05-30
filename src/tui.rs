@@ -7,10 +7,10 @@
 //! the whole UX premise of DALI.
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 
 use crate::config::{InstallConfig, Secret};
@@ -116,9 +116,14 @@ struct Wizard {
     fields: Vec<Field>,
     selected: usize,
     error: Option<String>,
-    /// Set once a valid form has been Enter-ed on the last field; a second
-    /// Enter is required to actually start, so a stray Enter cannot launch.
-    armed: bool,
+    /// When `Some`, the wizard is in the modal confirmation step: the built
+    /// config is held in [`Self::pending`] and the user must type the target
+    /// device name (or "yes") here to actually start. This makes the
+    /// destructive confirmation explicit and always visible, and means no
+    /// single key can launch a wipe.
+    confirm: Option<String>,
+    /// The validated config awaiting confirmation.
+    pending: Option<InstallConfig>,
 }
 
 impl Wizard {
@@ -170,7 +175,8 @@ impl Wizard {
             fields,
             selected: 0,
             error: None,
-            armed: false,
+            confirm: None,
+            pending: None,
         }
     }
 
@@ -187,21 +193,26 @@ impl Wizard {
                 continue;
             }
 
-            // Ctrl-C / Esc quit at any time.
-            if key.code == KeyCode::Esc
-                || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))
-            {
+            // Ctrl-C quits from anywhere.
+            if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
                 return Ok(None);
             }
 
-            // Any keypress invalidates a stale validation message; any key
-            // other than Enter also disarms a pending start (so you cannot
-            // edit a field and then have an old "armed" state launch).
-            self.error = None;
-            if key.code != KeyCode::Enter {
-                self.armed = false;
+            // In the confirmation modal, keys drive the confirmation input only.
+            if self.confirm.is_some() {
+                if let Some(config) = self.handle_confirm_key(key.code) {
+                    return Ok(Some(config));
+                }
+                continue;
             }
 
+            // Esc quits the form.
+            if key.code == KeyCode::Esc {
+                return Ok(None);
+            }
+
+            // Any keypress clears a stale validation message.
+            self.error = None;
             match key.code {
                 KeyCode::Up | KeyCode::BackTab => self.select(Dir::Prev),
                 KeyCode::Down | KeyCode::Tab => self.select(Dir::Next),
@@ -211,24 +222,52 @@ impl Wizard {
                 KeyCode::Char(c) => self.type_char(c),
                 KeyCode::Enter => {
                     if self.selected + 1 < self.fields.len() {
-                        // Enter advances through the form, never starts here.
-                        self.armed = false;
                         self.select(Dir::Next);
-                    } else if self.armed {
-                        // Second Enter on a valid, armed form: go.
-                        if let Some(config) = self.try_build() {
-                            return Ok(Some(config));
-                        }
-                        self.armed = false;
-                    } else if self.try_build().is_some() {
-                        // First Enter on a valid form: arm and ask for confirmation.
-                        self.armed = true;
+                    } else if let Some(config) = self.try_build() {
+                        // Valid form: enter the modal confirmation step.
+                        self.pending = Some(config);
+                        self.confirm = Some(String::new());
                     }
                     // (an invalid form leaves `self.error` set by try_build)
                 }
                 _ => {}
             }
         }
+    }
+
+    /// Handle a key while the confirmation modal is open. Returns the config to
+    /// install once the user has typed the device name (or "yes").
+    fn handle_confirm_key(&mut self, code: KeyCode) -> Option<InstallConfig> {
+        match code {
+            KeyCode::Esc => {
+                // Back out to the form without losing anything.
+                self.confirm = None;
+                self.pending = None;
+                self.error = None;
+            }
+            KeyCode::Backspace => {
+                if let Some(input) = self.confirm.as_mut() {
+                    input.pop();
+                }
+            }
+            KeyCode::Char(c) if !c.is_control() => {
+                if let Some(input) = self.confirm.as_mut() {
+                    input.push(c);
+                }
+            }
+            KeyCode::Enter => {
+                let typed = self.confirm.clone().unwrap_or_default();
+                let typed = typed.trim();
+                let disk = self.disk_value();
+                let basename = disk.rsplit('/').next().unwrap_or(&disk);
+                if typed == basename || typed == disk || typed.eq_ignore_ascii_case("yes") {
+                    return self.pending.take();
+                }
+                self.error = Some(format!("type `{basename}` (or yes) to confirm the wipe"));
+            }
+            _ => {}
+        }
+        None
     }
 
     /// Move the focused field one step in `dir`, wrapping at the ends.
@@ -349,15 +388,14 @@ impl Wizard {
         frame.render_widget(title, header);
 
         let mut lines = self.field_lines();
-        if let Some(error) = &self.error {
+        if self.confirm.is_none()
+            && let Some(error) = &self.error
+        {
             lines.push(Line::default());
             lines.push(Line::from(Span::styled(
                 format!("  ⚠ {error}"),
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             )));
-        }
-        if self.armed {
-            lines.extend(self.confirm_lines());
         }
 
         let form = Paragraph::new(lines).block(
@@ -368,11 +406,32 @@ impl Wizard {
         frame.render_widget(form, body);
 
         let help = Paragraph::new(
-            "↑↓/Tab move   ←→ change option   type to edit   Enter next (twice on last = start)   Esc quit",
+            "↑↓/Tab move   ←→ change option   type to edit   Enter next/confirm   Esc back/quit",
         )
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(Color::Gray))
         .block(Block::default().borders(Borders::ALL));
         frame.render_widget(help, footer);
+
+        // The confirmation modal floats over everything so it is always fully
+        // visible, even on a short console where the form would scroll.
+        if self.confirm.is_some() {
+            self.draw_confirm_modal(frame);
+        }
+    }
+
+    /// Render the centered confirmation popup over the form.
+    fn draw_confirm_modal(&self, frame: &mut Frame<'_>) {
+        let area = centered_rect(frame.area(), 64, 13);
+        frame.render_widget(Clear, area);
+        let modal = Paragraph::new(self.confirm_lines())
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Confirm installation ")
+                    .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            );
+        frame.render_widget(modal, area);
     }
 
     /// One line per form field (plus a hint line under the focused one).
@@ -415,8 +474,11 @@ impl Wizard {
         lines
     }
 
-    /// The pre-start confirmation summary shown once the form is armed.
+    /// The contents of the confirmation modal: a full summary of what will be
+    /// erased and installed, plus the typed-confirmation prompt.
     fn confirm_lines(&self) -> Vec<Line<'static>> {
+        let disk = self.disk_value();
+        let basename = disk.rsplit('/').next().unwrap_or(&disk).to_owned();
         let root_state = if self.text(ROOT_PW).is_empty() {
             "locked (sudo only)"
         } else {
@@ -428,43 +490,47 @@ impl Wizard {
         } else {
             extras.trim().to_owned()
         };
-        let details = [
-            format!(
-                "hostname {} · user {}",
+        let typed = self.confirm.clone().unwrap_or_default();
+
+        let mut lines = vec![
+            Line::from(Span::styled(
+                format!("This will ERASE {disk}"),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )),
+            Line::default(),
+            Line::from(format!(
+                "  hostname {} · user {}",
                 self.text(HOSTNAME),
                 self.text(USERNAME)
-            ),
-            format!(
-                "locale {} · keymap {} · tz {}",
+            )),
+            Line::from(format!(
+                "  locale {} · keymap {} · tz {}",
                 self.text(LOCALE),
                 self.text(KEYMAP),
                 self.text(TIMEZONE)
-            ),
-            format!(
-                "root {root_state} · zram {} · extras {extras}",
+            )),
+            Line::from(format!(
+                "  root {root_state} · zram {} · extras {extras}",
                 self.pick_value(ZRAM)
-            ),
-        ];
-
-        let mut lines = vec![
+            )),
             Line::default(),
             Line::from(Span::styled(
-                format!("  This will ERASE {} and install:", self.disk_value()),
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                format!("Type  {basename}  (or yes) then Enter to install — Esc to go back:"),
+                Style::default().fg(Color::Yellow),
+            )),
+            Line::from(Span::styled(
+                format!("> {typed}"),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
             )),
         ];
-        lines.extend(details.into_iter().map(|detail| {
-            Line::from(Span::styled(
-                format!("      {detail}"),
-                Style::default().fg(Color::White),
-            ))
-        }));
-        lines.push(Line::from(Span::styled(
-            "  ▶ Press Enter again to START (Esc to cancel)",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        )));
+        if let Some(error) = &self.error {
+            lines.push(Line::from(Span::styled(
+                format!("⚠ {error}"),
+                Style::default().fg(Color::Red),
+            )));
+        }
         lines
     }
 
@@ -476,6 +542,17 @@ impl Wizard {
             value
         }
     }
+}
+
+/// A `width`×`height` rectangle centered within `area` (clamped to it).
+fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
+    let [horizontal] = Layout::horizontal([Constraint::Length(width.min(area.width))])
+        .flex(Flex::Center)
+        .areas(area);
+    let [vertical] = Layout::vertical([Constraint::Length(height.min(area.height))])
+        .flex(Flex::Center)
+        .areas(horizontal);
+    vertical
 }
 
 /// Parse a comma-separated package list, trimming whitespace and dropping empties.
@@ -512,7 +589,8 @@ mod tests {
             )],
             selected: 0,
             error: None,
-            armed: false,
+            confirm: None,
+            pending: None,
         };
         assert_eq!(wizard.disk_value(), "/dev/vda");
     }
@@ -536,7 +614,8 @@ mod tests {
             ],
             selected: 0,
             error: None,
-            armed: false,
+            confirm: None,
+            pending: None,
         };
         wizard.select(Dir::Prev);
         assert_eq!(wizard.selected, 1);

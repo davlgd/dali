@@ -211,7 +211,24 @@ impl InstallConfig {
         if self.timezone.trim().is_empty() {
             return Err(Error::Config("timezone must not be empty".into()));
         }
+        for package in &self.extra_packages {
+            validate_package_name(package)?;
+        }
         Ok(())
+    }
+}
+
+/// Package names: non-empty, and limited to pacman's allowed characters so a
+/// stray token cannot only blow up mid-`pacstrap` after the disk is wiped.
+fn validate_package_name(name: &str) -> Result<()> {
+    let valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_' | '+' | '@'));
+    if valid {
+        Ok(())
+    } else {
+        Err(Error::Config(format!("invalid package name `{name}`")))
     }
 }
 
@@ -308,6 +325,23 @@ mod tests {
             "BASE_PACKAGES must install stack::KERNEL ({})",
             stack::KERNEL
         );
+    }
+
+    #[test]
+    fn invalid_extra_package_is_rejected() {
+        let mut config = config_with("/dev/vda", "pw");
+        config.extra_packages = vec!["htop".into(), "rm -rf /".into()];
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn package_name_rules() {
+        assert!(validate_package_name("base-devel").is_ok());
+        assert!(validate_package_name("gtk+").is_ok());
+        assert!(validate_package_name("lib32-glibc").is_ok());
+        assert!(validate_package_name("").is_err());
+        assert!(validate_package_name("bad name").is_err());
+        assert!(validate_package_name("rm;reboot").is_err());
     }
 
     #[test]

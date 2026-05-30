@@ -161,12 +161,18 @@ fn disk_is_mounted(disk: &str) -> bool {
         return false;
     };
     // A mount source is either the disk itself or one of its partitions
-    // (`/dev/vda`, `/dev/vda1`, `/dev/nvme0n1p2`, …), all of which begin with
-    // the whole-disk path.
+    // (`/dev/vda1`, `/dev/nvme0n1p2`, …). Require the suffix after the disk
+    // name to start with a digit or `p` so `/dev/sda` does not match a
+    // distinct `/dev/sdaa`.
     mounts
         .lines()
         .filter_map(|line| line.split_whitespace().next())
-        .any(|source| source == disk || source.starts_with(disk))
+        .any(|source| {
+            source == disk
+                || source
+                    .strip_prefix(disk)
+                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit() || c == 'p'))
+        })
 }
 
 /// Whether a console keymap of the given name exists under the kbd keymaps tree.
