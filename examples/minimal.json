@@ -1,0 +1,4 @@
+{
+  "disk": "/dev/vda",
+  "user": { "username": "arch", "password": "changeme" }
+}
