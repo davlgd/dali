@@ -32,56 +32,56 @@ pub mod stack {
         ("@pkg", "/var/cache/pacman/pkg"),
         ("@snapshots", "/.snapshots"),
     ];
-    /// Base packages every install receives — the bootable minimum.
+    /// Base packages every install receives — the bootable minimum (sorted).
     pub const BASE_PACKAGES: &[&str] = &[
         "base",
+        "base-devel",
+        "btrfs-progs",
+        "curl",
+        "git",
         "linux",
         "linux-firmware",
-        "btrfs-progs",
         "networkmanager",
         "sudo",
         "vim",
-        "git",
-        "base-devel",
-        "curl",
     ];
     /// Curated application set installed by default (official repos), on top of
-    /// [`BASE_PACKAGES`]. Toggled by `InstallConfig::default_apps`.
+    /// [`BASE_PACKAGES`]. Toggled by `InstallConfig::default_apps`. Sorted.
     pub const DEFAULT_APPS: &[&str] = &[
-        "nano",
-        "less",
-        "bash-completion",
         "atuin",
+        "avahi",
+        "bash-completion",
         "bat",
-        "zellij",
-        "jq",
-        "jless",
-        "yt-dlp",
-        "ffmpeg",
-        "lazygit",
-        "lazydocker",
-        "glab",
         "docker",
         "docker-buildx",
-        "avahi",
+        "ffmpeg",
+        "glab",
         "impala",
+        "jless",
+        "jq",
+        "lazydocker",
+        "lazygit",
+        "less",
         "minio-client",
-        "uv",
+        "nano",
         "openssh",
+        "uv",
         "whois",
+        "yt-dlp",
+        "zellij",
     ];
-    /// Base services enabled in every install. `systemd-boot-update` keeps the
-    /// ESP copy of systemd-boot current across upgrades; `fstrim.timer` runs
-    /// periodic TRIM (SSD/NVMe).
+    /// Base services enabled in every install (sorted). `systemd-boot-update`
+    /// keeps the ESP copy of systemd-boot current across upgrades;
+    /// `fstrim.timer` runs periodic TRIM (SSD/NVMe).
     pub const SERVICES: &[&str] = &[
         "NetworkManager",
-        "systemd-timesyncd",
-        "systemd-boot-update.service",
         "fstrim.timer",
+        "systemd-boot-update.service",
+        "systemd-timesyncd",
     ];
-    /// Services enabled only when the default app set is installed (their
-    /// units ship with `docker` / `avahi`).
-    pub const APP_SERVICES: &[&str] = &["docker.service", "avahi-daemon.service", "sshd.service"];
+    /// Services enabled only when the default app set is installed (their units
+    /// ship with `avahi` / `docker` / `openssh`). Sorted.
+    pub const APP_SERVICES: &[&str] = &["avahi-daemon.service", "docker.service", "sshd.service"];
 }
 
 /// A secret string (e.g. a password) that never reveals itself in `Debug`
@@ -183,7 +183,8 @@ impl Default for InstallConfig {
             locale: "en_US.UTF-8".to_owned(),
             keymap: "us".to_owned(),
             user: UserAccount {
-                username: "arch".to_owned(),
+                // No default username on purpose — the user must choose one.
+                username: String::new(),
                 password: Secret::default(),
             },
             root_password: Secret::default(),

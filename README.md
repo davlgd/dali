@@ -35,27 +35,29 @@ More precisely, every install gets:
   `networkmanager`, `sudo`, `vim`, `git`, `base-devel`, `curl` — plus the
   matching CPU microcode (`intel-ucode`/`amd-ucode`), `zram-generator` when zram
   is on, and any extras you list.
-- **Default app set** (`default_apps`, on by default): `nano`, `less`,
-  `bash-completion`, `atuin`, `bat`, `zellij`, `jq`, `jless`, `yt-dlp`,
-  `ffmpeg`, `lazygit`, `lazydocker`, `glab`, `docker`, `docker-buildx`,
-  `avahi`, `impala`, `minio-client`, `uv`, `openssh`, `whois` — with
-  `docker.service`, `avahi-daemon.service` and `sshd.service` enabled and the
-  user added to the `docker` group.
+- **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
+  `bash-completion`, `bat`, `docker`, `docker-buildx`, `ffmpeg`, `glab`,
+  `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`, `minio-client`,
+  `nano`, `openssh`, `uv`, `whois`, `yt-dlp`, `zellij` — with `docker.service`,
+  `avahi-daemon.service` and `sshd.service` enabled and the user added to the
+  `docker` group.
 - **SSH keys** (optional, `github_user`): when set, that GitHub account's public
   keys (`https://github.com/<user>.keys`) are imported as the user's accepted
   SSH keys (`~/.ssh/authorized_keys`).
-- **Shell environment**: the user's `~/.bashrc` gets a set of aliases and helper
-  functions (`mkcd`, `pgen`, `gac`, `gl`, `gst`, `dps`, `myip`, `w`, `check`, …)
-  and `~/.local/bin` on `PATH`.
+- **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
+  `mise` activation, helper functions (`check`, `clean_cargo`, `f`, `mkcd`, `w`)
+  and aliases (`add`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
+  `dps`, `myip`, `pgen`).
 - **Provisioning** (`provision`, on by default, best-effort): bootstraps the
   [`paru`](https://github.com/Morganamilo/paru) AUR helper, installs any
   `aur_packages` you list through it, builds the [V compiler](https://vlang.io)
-  from source into `~/.local/bin`, and runs the [`mise`](https://mise.jdx.dev)
-  and [Claude Code](https://claude.com/claude-code) installers as your user.
-  Network-bound; failures are reported as warnings and never abort the (already
-  bootable) install. (`pamac-aur` is intentionally not in the defaults — it
-  currently needs an older `libalpm` than Arch ships; add it to `aur_packages`
-  once it is compatible again.)
+  from source into `~/.local/bin`, runs the [`mise`](https://mise.jdx.dev) and
+  [Claude Code](https://claude.com/claude-code) installers as your user, and
+  installs `bun`, `codex`, `gemini`, `node`, `opencode` and `pi` globally via
+  `mise`. Network-bound; failures are reported as warnings and never abort the
+  (already bootable) install. (`pamac-aur` is intentionally not in the defaults
+  — it currently needs an older `libalpm` than Arch ships; add it to
+  `aur_packages` once it is compatible again.)
 - **ESP**: FAT32, 1 GiB, mounted at `/boot`.
 - **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.

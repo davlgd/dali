@@ -89,6 +89,14 @@ impl Step for Provision {
         );
         best_effort(
             ctx,
+            "installing global tools via mise",
+            &user_sh(
+                &user,
+                "~/.local/bin/mise use -g bun codex gemini node opencode pi",
+            ),
+        );
+        best_effort(
+            ctx,
             "installing Claude Code",
             &user_sh(&user, "curl -fsSL https://claude.ai/install.sh | bash"),
         );

@@ -44,26 +44,20 @@ case ":$PATH:" in
 esac
 "#;
 
-/// The block appended to `~/.bashrc`.
+/// The block appended to `~/.bashrc`. Functions and aliases are kept in
+/// alphabetical order.
 const BASHRC_BLOCK: &str = r#"
 # >>> DALI shell setup >>>
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 
-mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
+# Activate mise (runtime/tool manager) when installed.
+command -v mise >/dev/null && eval "$(mise activate bash)"
 
 check() {
     if curl --output /dev/null --silent --head --fail "$1"; then
         echo "$1 is online"
     else
         echo "$1 is offline"
-    fi
-}
-
-w() {
-    if [[ "$2" == "--full" ]]; then
-        curl "wttr.in/${1}"
-    else
-        curl "wttr.in/${1}?format=2"
     fi
 }
 
@@ -74,15 +68,28 @@ clean_cargo() {
 }
 
 f() { find / -type f -name "$1" 2> /dev/null; }
-alias pgen='gpg --gen-random --armor 2 32'
-alias gl='git log --oneline --all --graph --decorate'
+
+mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
+
+w() {
+    if [[ "$2" == "--full" ]]; then
+        curl "wttr.in/${1}"
+    else
+        curl "wttr.in/${1}?format=2"
+    fi
+}
+
+alias add='sudo pacman -S'
+alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 alias gac='git add . && git commit -m'
-alias gst='git status'
-alias gsw='git switch'
+alias gl='git log --oneline --all --graph --decorate'
 alias gri='git rebase -i'
 alias grroot='git rebase -i --root'
-
+alias gst='git status'
+alias gsw='git switch'
 alias myip='curl -s monip.org | sed "s/</\n</g" | sed -n "s/.*IP : \([0-9.]*\).*/IP: \1/p; s/<i>\(.*\)/Reverse: \1/p"'
-alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+alias pgen='gpg --gen-random --armor 2 32'
+alias remove='sudo pacman -Rns'
+alias search='pacman -Ss'
 # <<< DALI shell setup <<<
 "#;

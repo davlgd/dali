@@ -132,7 +132,7 @@ pub fn list_disks() -> Vec<Disk> {
 }
 
 fn is_virtual_device(name: &str) -> bool {
-    const VIRTUAL_PREFIXES: &[&str] = &["loop", "ram", "sr", "dm-", "zram", "md", "fd"];
+    const VIRTUAL_PREFIXES: &[&str] = &["dm-", "fd", "loop", "md", "ram", "sr", "zram"];
     VIRTUAL_PREFIXES.iter().any(|p| name.starts_with(p))
 }
 
