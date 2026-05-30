@@ -1,0 +1,89 @@
+name: Build Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Static musl build — the headline "download one binary" artifact:
+          # it has no glibc dependency and runs as-is from the Arch live ISO.
+          - target: x86_64-unknown-linux-musl
+            name: dali-linux-x86_64-musl
+            static: true
+          # glibc build for environments that prefer dynamic linking.
+          - target: x86_64-unknown-linux-gnu
+            name: dali-linux-x86_64-gnu
+            static: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install musl tools
+        if: matrix.static
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          strip dali
+          chmod +x dali
+          sudo apt-get update && sudo apt-get install -y upx
+          upx --best --lzma dali
+          mv dali ../../../${{ matrix.name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+
+  release:
+    name: Attach binaries to release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: ./binaries
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd ./binaries
+          sha256sum dali-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ./binaries/*
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: false

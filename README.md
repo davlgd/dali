@@ -42,6 +42,19 @@ More precisely, every install gets:
   `locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, and root **locked**
   (empty `root_password`).
 
+## Install
+
+Each GitHub release ships a static x86-64 binary. From the Arch live ISO:
+
+```sh
+curl -fLO https://github.com/davlgd/dali/releases/latest/download/dali-linux-x86_64-musl
+chmod +x dali-linux-x86_64-musl
+./dali-linux-x86_64-musl
+```
+
+Verify it against the published `SHA256SUMS` if you like. A glibc build
+(`dali-linux-x86_64-gnu`) is also attached for environments that prefer it.
+
 ## Requirements
 
 DALI runs from the **Arch Linux live ISO booted in UEFI mode**, as **root**. A
