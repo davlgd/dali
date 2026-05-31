@@ -25,6 +25,8 @@ mod storage;
 mod tuning;
 mod users;
 
+use std::fmt::Write as _;
+
 use crate::config::InstallConfig;
 use crate::error::Result;
 use crate::report::{Reporter, TranscriptReporter};
@@ -98,22 +100,36 @@ pub fn install(config: &InstallConfig, sys: &dyn Sys, reporter: &mut dyn Reporte
     config.validate()?;
 
     let steps = pipeline();
-    let total = steps.len();
-    // Capture a transcript alongside the live reporter so it can be written into
-    // the installed system as an install log.
+    // Capture a transcript + per-step status alongside the live reporter so they
+    // can be written into the installed system.
     let mut transcript = TranscriptReporter::new(reporter);
+    let outcome = run_pipeline(&steps, config, sys, &mut transcript);
+
+    // Best-effort diagnostics, so they never mask the real outcome and so a
+    // failed install still records how far it got (where /mnt is available).
+    let _ = write_install_log(sys, &transcript);
+    let _ = write_step_status(sys, &transcript);
+    outcome
+}
+
+/// Run each step in order, reporting through `reporter`.
+fn run_pipeline(
+    steps: &[Box<dyn Step>],
+    config: &InstallConfig,
+    sys: &dyn Sys,
+    reporter: &mut dyn Reporter,
+) -> Result<()> {
+    let total = steps.len();
     for (i, step) in steps.iter().enumerate() {
-        transcript.step_start(i + 1, total, step.name());
+        reporter.step_start(i + 1, total, step.name());
         let mut ctx = Context {
             config,
             sys,
-            reporter: &mut transcript,
+            reporter,
         };
         step.run(&mut ctx)?;
-        transcript.step_done(step.name());
+        reporter.step_done(step.name());
     }
-
-    write_install_log(sys, &transcript)?;
     Ok(())
 }
 
@@ -124,6 +140,29 @@ fn write_install_log(sys: &dyn Sys, transcript: &TranscriptReporter) -> Result<(
         &target_path("/var/log/dali-install.log"),
         transcript.transcript(),
     )
+}
+
+/// Persist a per-step completion map into the target as
+/// `/var/log/dali-steps.toml`, so a partial install is diagnosable.
+fn write_step_status(sys: &dyn Sys, transcript: &TranscriptReporter) -> Result<()> {
+    sys.mkdir_p(&target_path("/var/log"))?;
+    sys.write(
+        &target_path("/var/log/dali-steps.toml"),
+        &step_status_toml(transcript.steps()),
+    )
+}
+
+/// Render step records as TOML (`[[step]]` tables).
+fn step_status_toml(records: &[crate::report::StepRecord]) -> String {
+    let mut out = String::new();
+    for record in records {
+        let _ = writeln!(
+            out,
+            "[[step]]\nindex = {}\nname = \"{}\"\ncompleted = {}\n",
+            record.index, record.name, record.completed
+        );
+    }
+    out
 }
 
 /// Shared test helpers for exercising individual steps against a dry-run `Sys`.
@@ -232,6 +271,34 @@ mod tests {
                 .any(|a| a.contains("/var/log/dali-install.log")),
             "the install transcript is written into the target"
         );
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/var/log/dali-steps.toml")),
+            "the per-step status is written into the target"
+        );
+    }
+
+    #[test]
+    fn step_status_toml_renders_completion() {
+        use crate::report::StepRecord;
+        let toml = step_status_toml(&[
+            StepRecord {
+                index: 1,
+                total: 2,
+                name: "Partition disk".to_owned(),
+                completed: true,
+            },
+            StepRecord {
+                index: 2,
+                total: 2,
+                name: "Install base system".to_owned(),
+                completed: false,
+            },
+        ]);
+        assert!(toml.contains("name = \"Partition disk\""));
+        assert!(toml.contains("completed = true"));
+        assert!(toml.contains("completed = false"));
     }
 
     #[test]

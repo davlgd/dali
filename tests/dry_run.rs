@@ -51,6 +51,7 @@ fn dry_run_emits_a_complete_plan() {
         "useradd",
         "systemctl enable NetworkManager",
         "/var/log/dali-install.log",
+        "/var/log/dali-steps.toml",
         "Dry run complete",
     ] {
         assert!(out.contains(needle), "plan missing `{needle}`\n{out}");

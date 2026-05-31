@@ -89,7 +89,8 @@ More precisely, every install gets:
   `\4`) at the console login prompt — so you can see where to SSH in — and
   `/etc/motd` is a short welcome that points at `up`.
 - **Install log**: the full install transcript is written to
-  `/var/log/dali-install.log` in the target, for post-install diagnosis.
+  `/var/log/dali-install.log` in the target, and a per-step completion map to
+  `/var/log/dali-steps.toml`, for post-install (or partial-install) diagnosis.
 - **Provenance**: `/etc/dali-release` records that DALI provisioned the system
   (and which version), and `/etc/os-release` gains additive `DALI_*` fields
   while keeping `ID=arch` / `PRETTY_NAME="Arch Linux"` — it stays Arch.
