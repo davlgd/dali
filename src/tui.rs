@@ -935,4 +935,113 @@ mod tests {
         wizard.select(Dir::Next);
         assert_eq!(wizard.selected, 0);
     }
+
+    /// Set the string value of a Text/Secret field (test convenience).
+    fn set(wizard: &mut Wizard, index: usize, value: &str) {
+        match &mut wizard.fields[index].kind {
+            Kind::Text(s) | Kind::Secret(s) => *s = value.to_owned(),
+            _ => panic!("field {index} is not text/secret"),
+        }
+    }
+
+    /// A deterministic form whose field order mirrors `Wizard::new`, so
+    /// `try_build` can be exercised without probing the live system.
+    fn form_wizard() -> Wizard {
+        let fields = vec![
+            Field::text("Target disk", "", "/dev/vda".to_owned()),
+            Field::text("Hostname", "", "myhost".to_owned()),
+            Field::text("Username", "", "alice".to_owned()),
+            Field::secret("User password", ""),
+            Field::secret("Confirm user pw", ""),
+            Field::secret("Root password", ""),
+            Field::secret("Confirm root pw", ""),
+            Field::choice("Locale", "", vec!["en_US.UTF-8".to_owned()], "en_US.UTF-8"),
+            Field::choice("Keymap", "", vec!["us".to_owned()], "us"),
+            Field::choice("Timezone", "", vec!["UTC".to_owned()], "UTC"),
+            Field::pick_with("Zram swap", "", vec!["yes".to_owned(), "no".to_owned()], 0),
+            Field::text("Extra packages", "", "htop, git".to_owned()),
+            Field::text("GitHub user", "", String::new()),
+        ];
+        Wizard {
+            fields,
+            selected: 0,
+            error: None,
+            confirm: None,
+            pending: None,
+            picker: None,
+        }
+    }
+
+    #[test]
+    fn new_builds_fields_in_documented_index_order() {
+        // Field labels are independent of the live probes, so `new` is
+        // deterministic here. Guards the parallel index constants against
+        // drifting out of lock-step with the form's build order — a silent
+        // wrong-field read otherwise.
+        let wizard = Wizard::new(InstallConfig::default());
+        assert_eq!(wizard.fields.len(), 13);
+        assert_eq!(wizard.fields[DISK].label, "Target disk");
+        assert_eq!(wizard.fields[HOSTNAME].label, "Hostname");
+        assert_eq!(wizard.fields[USERNAME].label, "Username");
+        assert_eq!(wizard.fields[USER_PW].label, "User password");
+        assert_eq!(wizard.fields[USER_PW_CONFIRM].label, "Confirm user pw");
+        assert_eq!(wizard.fields[ROOT_PW].label, "Root password");
+        assert_eq!(wizard.fields[ROOT_PW_CONFIRM].label, "Confirm root pw");
+        assert_eq!(wizard.fields[LOCALE].label, "Locale");
+        assert_eq!(wizard.fields[KEYMAP].label, "Keymap");
+        assert_eq!(wizard.fields[TIMEZONE].label, "Timezone");
+        assert_eq!(wizard.fields[ZRAM].label, "Zram swap");
+        assert_eq!(wizard.fields[EXTRA].label, "Extra packages");
+        assert_eq!(wizard.fields[GITHUB].label, "GitHub user");
+    }
+
+    #[test]
+    fn try_build_maps_each_field_to_the_right_config_slot() {
+        let mut wizard = form_wizard();
+        set(&mut wizard, USER_PW, "pw1");
+        set(&mut wizard, USER_PW_CONFIRM, "pw1");
+        // Root password left empty -> locked.
+
+        let config = wizard.try_build().expect("a complete form builds a config");
+        assert_eq!(config.disk, "/dev/vda");
+        assert_eq!(config.hostname, "myhost");
+        assert_eq!(config.user.username, "alice");
+        assert_eq!(config.user.password.expose(), "pw1");
+        assert!(config.root_password.is_empty());
+        assert_eq!(config.locale, "en_US.UTF-8");
+        assert_eq!(config.keymap, "us");
+        assert_eq!(config.timezone, "UTC");
+        assert!(config.zram_swap);
+        assert_eq!(config.extra_packages, ["htop", "git"]);
+        assert!(config.github_user.is_empty());
+    }
+
+    #[test]
+    fn try_build_rejects_mismatched_user_password() {
+        let mut wizard = form_wizard();
+        set(&mut wizard, USER_PW, "pw1");
+        set(&mut wizard, USER_PW_CONFIRM, "pw2");
+        assert!(wizard.try_build().is_none());
+        assert!(wizard.error.unwrap().contains("user passwords"));
+    }
+
+    #[test]
+    fn try_build_rejects_mismatched_root_password() {
+        let mut wizard = form_wizard();
+        set(&mut wizard, USER_PW, "pw1");
+        set(&mut wizard, USER_PW_CONFIRM, "pw1");
+        set(&mut wizard, ROOT_PW, "root1");
+        set(&mut wizard, ROOT_PW_CONFIRM, "root2");
+        assert!(wizard.try_build().is_none());
+        assert!(wizard.error.unwrap().contains("root passwords"));
+    }
+
+    #[test]
+    fn confirm_accepts_basename_full_path_or_yes() {
+        let wizard = form_wizard(); // disk is "/dev/vda"
+        assert!(wizard.confirm_accepts("vda"));
+        assert!(wizard.confirm_accepts("/dev/vda"));
+        assert!(wizard.confirm_accepts("YES"));
+        assert!(!wizard.confirm_accepts("nope"));
+    }
 }
