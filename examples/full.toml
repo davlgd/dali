@@ -10,6 +10,7 @@ aur_packages = ["kernel-modules-hook"]
 zram_swap = true
 default_apps = true
 provision = true
+custom_commands = []
 
 [user]
 username = "david"

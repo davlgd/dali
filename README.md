@@ -65,7 +65,9 @@ More precisely, every install gets:
   `linux-modules-cleanup.service`. Network-bound; failures are reported as
   warnings and never abort the (already bootable) install. (`pamac-aur` is
   intentionally not in the defaults — it currently needs an older `libalpm`
-  than Arch ships; add it to `aur_packages` once it is compatible again.)
+  than Arch ships; add it to `aur_packages` once it is compatible again.) Any
+  `custom_commands` you list run as your user inside the target at the end of
+  this step.
 - **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists` are
   enabled — on the live system before `pacstrap` (faster install) and in the
   target so it persists.

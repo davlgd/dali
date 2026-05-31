@@ -108,6 +108,19 @@ impl Step for Provision {
             &user_sh(&user, "curl -fsSL https://claude.ai/install.sh | bash"),
         );
 
+        // 4. User-supplied commands, while passwordless sudo is still granted.
+        for cmd in ctx.config.custom_commands.clone() {
+            let cmd = cmd.trim();
+            if cmd.is_empty() {
+                continue;
+            }
+            best_effort(
+                ctx,
+                &format!("running custom command: {cmd}"),
+                &user_sh(&user, cmd),
+            );
+        }
+
         // Revoke the passwordless sudo grant.
         ctx.sys.run(
             &Command::new("rm")
@@ -162,5 +175,24 @@ mod tests {
         let mut cfg = config();
         cfg.provision = false;
         assert!(dry_actions(&Provision, &cfg).is_empty());
+    }
+
+    #[test]
+    fn custom_commands_run_before_the_sudo_revoke() {
+        let mut cfg = config();
+        cfg.custom_commands = vec!["touch /tmp/marker".to_owned(), "  ".to_owned()];
+        let actions = dry_actions(&Provision, &cfg);
+        let cmd = actions
+            .iter()
+            .position(|a| a.contains("touch /tmp/marker"))
+            .expect("custom command runs");
+        let revoke = actions
+            .iter()
+            .position(|a| a.contains("rm -f /etc/sudoers.d/99-dali-provision"))
+            .expect("sudo revoked");
+        assert!(
+            cmd < revoke,
+            "custom commands run while sudo is still granted"
+        );
     }
 }

@@ -72,6 +72,9 @@ pub struct InstallConfig {
     /// [`Self::aur_packages`]) and the `mise` / Claude Code installers.
     /// Best-effort and network-bound.
     pub provision: bool,
+    /// Optional shell commands run as the user, inside the target, near the end
+    /// of provisioning (best-effort). Requires [`Self::provision`].
+    pub custom_commands: Vec<String>,
     /// The administrator account to create (member of `wheel`, sudo-enabled).
     ///
     /// Kept last so it serializes as a trailing `[user]` TOML table (TOML
@@ -97,6 +100,7 @@ impl Default for InstallConfig {
             zram_swap: true,
             default_apps: true,
             provision: true,
+            custom_commands: Vec::new(),
             user: UserAccount {
                 // No default username on purpose — the user must choose one.
                 username: String::new(),
