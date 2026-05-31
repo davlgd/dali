@@ -277,6 +277,26 @@ mod tests {
     }
 
     #[test]
+    fn app_services_have_their_packages_in_default_apps() {
+        // Guards against APP_SERVICES (enabled with the app set) drifting from
+        // the package that ships each unit — which would fail to enable.
+        let owners = [
+            ("avahi-daemon.service", "avahi"),
+            ("docker.service", "docker"),
+            ("sshd.service", "openssh"),
+        ];
+        for service in stack::APP_SERVICES {
+            let Some((_, package)) = owners.iter().find(|(s, _)| s == service) else {
+                panic!("APP_SERVICES entry `{service}` has no known package");
+            };
+            assert!(
+                stack::DEFAULT_APPS.contains(package),
+                "`{package}` (owner of `{service}`) must be in DEFAULT_APPS"
+            );
+        }
+    }
+
+    #[test]
     fn invalid_extra_package_is_rejected() {
         let mut config = config_with("/dev/vda", "pw");
         config.extra_packages = vec!["htop".into(), "rm -rf /".into()];

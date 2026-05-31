@@ -33,7 +33,15 @@ impl Step for Provision {
 
         // `arch-chroot` does not guarantee working DNS, so give the target a
         // public resolver for the duration. NetworkManager manages
-        // /etc/resolv.conf itself after first boot, overwriting this.
+        // /etc/resolv.conf itself after first boot, overwriting this. Remove any
+        // existing file first in case a package shipped it as a symlink (which
+        // `write` would otherwise follow).
+        ctx.sys.run(
+            &Command::new("rm")
+                .arg("-f")
+                .arg("/etc/resolv.conf")
+                .in_chroot(),
+        )?;
         ctx.sys.write(
             &target_path("/etc/resolv.conf"),
             "nameserver 9.9.9.9\nnameserver 1.1.1.1\n",
