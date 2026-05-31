@@ -157,6 +157,11 @@ fn read_model(base: &Path) -> Option<String> {
     }
 }
 
+/// Read a file to a string, or `None` if it is missing/unreadable.
+pub fn read_file(path: &str) -> Option<String> {
+    std::fs::read_to_string(path).ok()
+}
+
 /// Where NetworkManager stores connection profiles on the live system.
 pub const NM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
 /// Where iwd stores network profiles on the live system.

@@ -9,6 +9,7 @@
 mod base;
 mod bootloader;
 mod fstab;
+mod host_pacman;
 mod initramfs;
 mod localization;
 mod network;
@@ -67,6 +68,7 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
     vec![
         Box::new(partition::Partition),
         Box::new(storage::FormatAndMount),
+        Box::new(host_pacman::HostPrep),
         Box::new(base::Pacstrap),
         Box::new(fstab::GenerateFstab),
         Box::new(localization::Localization),
@@ -174,6 +176,7 @@ mod tests {
             [
                 "Partition disk",
                 "Create filesystems and mount",
+                "Prepare host pacman (config + mirrors)",
                 "Install base system",
                 "Generate fstab",
                 "Configure localization",

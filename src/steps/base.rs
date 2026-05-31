@@ -44,7 +44,16 @@ impl Step for Pacstrap {
 
         ctx.sys.mkdir_p(&target_path("/etc/gnupg"))?;
         ctx.sys
-            .write(&target_path("/etc/gnupg/dirmngr.conf"), stack::DIRMNGR_CONF)
+            .write(&target_path("/etc/gnupg/dirmngr.conf"), stack::DIRMNGR_CONF)?;
+
+        // pacstrap does not copy the host pacman.conf, so apply the same tuning
+        // to the target's own (shipped by the `pacman` package).
+        let pacman_conf = target_path("/etc/pacman.conf");
+        if let Some(body) = probe::read_file(&pacman_conf) {
+            ctx.sys
+                .write(&pacman_conf, &super::host_pacman::tune_pacman_conf(&body))?;
+        }
+        Ok(())
     }
 }
 
