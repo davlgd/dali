@@ -2,128 +2,24 @@
 //! DALI will install.
 //!
 //! DALI is **opinionated minimal**: the technical stack is fixed (UEFI + GPT,
-//! Btrfs root, systemd-boot, the `linux` kernel, NetworkManager). The only
-//! things the user actually decides are captured in [`InstallConfig`]. Keeping
-//! the fixed choices as constants — rather than yet more knobs — is a
-//! deliberate KISS decision.
+//! Btrfs root, systemd-boot, the `linux` kernel, NetworkManager) and lives in
+//! [`stack`]. The only things the user actually decides are captured in
+//! [`InstallConfig`]. The [`Secret`] type and the input validators live in
+//! their own submodules so this file stays focused on the config model.
 
-use std::fmt;
+pub mod stack;
+
+mod secret;
+mod validate;
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use validate::{validate_github_user, validate_hostname, validate_package_name, validate_username};
 
-/// The fixed, opinionated technical choices that define a DALI install.
-pub mod stack {
-    /// Size of the EFI System Partition.
-    pub const ESP_SIZE_MIB: u64 = 1024;
-    /// The kernel package installed by default.
-    pub const KERNEL: &str = "linux";
-    /// Mountpoint of the EFI System Partition inside the installed system.
-    pub const ESP_MOUNT: &str = "/boot";
-    /// Where the target root is mounted on the live system during install.
-    pub const TARGET_MOUNT: &str = "/mnt";
-    /// Btrfs subvolume layout: (subvolume name, relative mountpoint).
-    pub const SUBVOLUMES: &[(&str, &str)] = &[
-        ("@", "/"),
-        ("@home", "/home"),
-        ("@log", "/var/log"),
-        ("@pkg", "/var/cache/pacman/pkg"),
-        ("@snapshots", "/.snapshots"),
-    ];
-    /// Base packages every install receives — the bootable minimum (sorted).
-    pub const BASE_PACKAGES: &[&str] = &[
-        "base",
-        "base-devel",
-        "btrfs-progs",
-        "curl",
-        "git",
-        "linux",
-        "linux-firmware",
-        "networkmanager",
-        "sudo",
-        "vim",
-    ];
-    /// Curated application set installed by default (official repos), on top of
-    /// [`BASE_PACKAGES`]. Toggled by `InstallConfig::default_apps`. Sorted.
-    pub const DEFAULT_APPS: &[&str] = &[
-        "atuin",
-        "avahi",
-        "bash-completion",
-        "bat",
-        "docker",
-        "docker-buildx",
-        "ffmpeg",
-        "glab",
-        "impala",
-        "jless",
-        "jq",
-        "lazydocker",
-        "lazygit",
-        "less",
-        "minio-client",
-        "nano",
-        "openssh",
-        "uv",
-        "whois",
-        "yt-dlp",
-        "zellij",
-    ];
-    /// Base services enabled in every install (sorted). `systemd-boot-update`
-    /// keeps the ESP copy of systemd-boot current across upgrades;
-    /// `fstrim.timer` runs periodic TRIM (SSD/NVMe).
-    pub const SERVICES: &[&str] = &[
-        "NetworkManager",
-        "fstrim.timer",
-        "systemd-boot-update.service",
-        "systemd-timesyncd",
-    ];
-    /// Services enabled only when the default app set is installed (their units
-    /// ship with `avahi` / `docker` / `openssh`). Sorted.
-    pub const APP_SERVICES: &[&str] = &["avahi-daemon.service", "docker.service", "sshd.service"];
-    /// Tools installed globally during provisioning via `mise use -g`. Sorted.
-    pub const MISE_GLOBAL_TOOLS: &[&str] = &["bun", "codex", "gemini", "node", "opencode", "pi"];
-}
-
-/// A secret string (e.g. a password) that never reveals itself in `Debug`
-/// output or logs.
-#[derive(Clone, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Secret(String);
-
-impl Secret {
-    /// Wrap a plaintext secret.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    /// Borrow the underlying plaintext. Use sparingly and never log the result.
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-
-    /// Whether the secret is empty.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl fmt::Debug for Secret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.is_empty() {
-            f.write_str("Secret(<empty>)")
-        } else {
-            f.write_str("Secret(<redacted>)")
-        }
-    }
-}
-
-impl From<&str> for Secret {
-    fn from(value: &str) -> Self {
-        Self::new(value)
-    }
-}
+pub use secret::Secret;
 
 /// The administrator account created during installation.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -280,59 +176,6 @@ impl InstallConfig {
     }
 }
 
-/// A DNS-label-style name: 1..=`max_len` chars, ASCII-alphanumeric or hyphen,
-/// not starting/ending with a hyphen. `kind` labels the error message.
-fn validate_dns_label(name: &str, max_len: usize, kind: &str) -> Result<()> {
-    let valid = (1..=max_len).contains(&name.len())
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-        && !name.starts_with('-')
-        && !name.ends_with('-');
-    if valid {
-        Ok(())
-    } else {
-        Err(Error::Config(format!("invalid {kind} `{name}`")))
-    }
-}
-
-/// GitHub usernames: 1–39 chars, alphanumeric or single hyphens, not
-/// starting/ending with a hyphen. Validated so the `.keys` URL is well-formed.
-fn validate_github_user(name: &str) -> Result<()> {
-    validate_dns_label(name, 39, "GitHub username")
-}
-
-/// Package names: non-empty, and limited to pacman's allowed characters so a
-/// stray token cannot only blow up mid-`pacstrap` after the disk is wiped.
-fn validate_package_name(name: &str) -> Result<()> {
-    let valid = !name.is_empty()
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_' | '+' | '@'));
-    if valid {
-        Ok(())
-    } else {
-        Err(Error::Config(format!("invalid package name `{name}`")))
-    }
-}
-
-/// Hostnames: 1–63 chars, alphanumeric or hyphen, not starting/ending with a hyphen.
-fn validate_hostname(name: &str) -> Result<()> {
-    validate_dns_label(name, 63, "hostname")
-}
-
-/// Linux usernames: start with a lowercase letter or underscore, followed by
-/// lowercase letters, digits, underscores or hyphens; at most 32 chars.
-fn validate_username(name: &str) -> Result<()> {
-    let mut chars = name.chars();
-    let head_ok = matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c == '_');
-    let tail_ok =
-        chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
-    if head_ok && tail_ok && (1..=32).contains(&name.len()) {
-        Ok(())
-    } else {
-        Err(Error::Config(format!("invalid username `{name}`")))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,32 +208,6 @@ mod tests {
     }
 
     #[test]
-    fn secret_never_leaks_in_debug() {
-        let secret = Secret::new("topsecret");
-        assert_eq!(format!("{secret:?}"), "Secret(<redacted>)");
-        assert!(!format!("{secret:?}").contains("topsecret"));
-    }
-
-    #[test]
-    fn hostname_rules() {
-        assert!(validate_hostname("arch").is_ok());
-        assert!(validate_hostname("my-arch-01").is_ok());
-        assert!(validate_hostname("-bad").is_err());
-        assert!(validate_hostname("bad-").is_err());
-        assert!(validate_hostname("").is_err());
-        assert!(validate_hostname("white space").is_err());
-    }
-
-    #[test]
-    fn username_rules() {
-        assert!(validate_username("arch").is_ok());
-        assert!(validate_username("_svc").is_ok());
-        assert!(validate_username("1bad").is_err());
-        assert!(validate_username("Bad").is_err());
-        assert!(validate_username("").is_err());
-    }
-
-    #[test]
     fn base_packages_include_the_configured_kernel() {
         // Guards against KERNEL and BASE_PACKAGES diverging into a bootloader
         // entry that points at a kernel image that was never installed.
@@ -406,16 +223,6 @@ mod tests {
         let mut config = config_with("/dev/vda", "pw");
         config.extra_packages = vec!["htop".into(), "rm -rf /".into()];
         assert!(config.validate().is_err());
-    }
-
-    #[test]
-    fn package_name_rules() {
-        assert!(validate_package_name("base-devel").is_ok());
-        assert!(validate_package_name("gtk+").is_ok());
-        assert!(validate_package_name("lib32-glibc").is_ok());
-        assert!(validate_package_name("").is_err());
-        assert!(validate_package_name("bad name").is_err());
-        assert!(validate_package_name("rm;reboot").is_err());
     }
 
     #[test]
