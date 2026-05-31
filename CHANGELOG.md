@@ -4,6 +4,31 @@ All notable changes to DALI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-01
+
+### Added
+
+- Wi-Fi carry-over now actually works under NetworkManager: iwd profiles (the
+  live ISO's default Wi-Fi backend) are **converted** into NetworkManager
+  keyfiles instead of copied inert, so a system installed over Wi-Fi comes back
+  online after the first reboot. Secrets land `0600` in a `0700` directory.
+- Security hardening for the default app set: an sshd drop-in
+  (`PermitRootLogin no`, `MaxAuthTries 3`) and a `ufw` firewall (deny incoming,
+  allow outgoing, keep SSH reachable) applied by a first-boot one-shot service.
+- `ufw` is now part of the default app set.
+- `--completions <shell>` generates shell completions and `--man` generates a
+  man page, both written to standard output.
+
+### Changed
+
+- When a step fails, the install transcript now records the failing step's
+  reason instead of only marking the run as failed.
+
+### Fixed
+
+- The target's `/etc/resolv.conf` is removed before being rewritten, so a
+  packaged symlink is replaced by a real file rather than being followed.
+
 ## [0.2.1] - 2026-06-01
 
 ### Changed
