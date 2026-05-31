@@ -22,7 +22,7 @@ mod users;
 use crate::config::InstallConfig;
 use crate::error::Result;
 use crate::report::Reporter;
-use crate::system::Sys;
+use crate::system::{Command, Sys, target_path};
 
 /// Everything a step needs to do its job.
 pub struct Context<'a> {
@@ -39,6 +39,16 @@ impl Context<'_> {
     fn info(&mut self, message: impl AsRef<str>) {
         self.reporter.info(message.as_ref());
     }
+}
+
+/// Write a sudoers drop-in at target path `name` with `contents`, then
+/// `chmod 0440` it inside the chroot — the mode `sudo` requires for drop-ins
+/// (it silently ignores group/world-writable ones). Shared so the mode lives
+/// in one place across the steps that grant sudo.
+fn write_sudoers(ctx: &Context<'_>, name: &str, contents: &str) -> Result<()> {
+    ctx.sys.write(&target_path(name), contents)?;
+    ctx.sys
+        .run(&Command::new("chmod").arg("0440").arg(name).in_chroot())
 }
 
 /// A single, idempotent-as-possible unit of installation work.

@@ -1,4 +1,4 @@
-//! Step 9 — enable the services that make the installed system usable, and
+//! Step — enable the services that make the installed system usable, and
 //! configure zram swap when requested.
 
 use super::{Context, Step};

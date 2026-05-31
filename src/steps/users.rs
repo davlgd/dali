@@ -1,9 +1,9 @@
 //! Step 8 — set the root password (or lock it) and create the sudo-enabled
 //! administrator account.
 
-use super::{Context, Step};
+use super::{Context, Step, write_sudoers};
 use crate::error::Result;
-use crate::system::{Command, target_path};
+use crate::system::Command;
 
 /// Configures the root account and creates the primary user.
 pub struct Users;
@@ -48,16 +48,7 @@ impl Step for Users {
 
         // Grant the wheel group sudo. A drop-in keeps the main sudoers pristine.
         ctx.info("granting sudo to the wheel group");
-        ctx.sys.write(
-            &target_path("/etc/sudoers.d/10-wheel"),
-            "%wheel ALL=(ALL:ALL) ALL\n",
-        )?;
-        ctx.sys.run(
-            &Command::new("chmod")
-                .arg("0440")
-                .arg("/etc/sudoers.d/10-wheel")
-                .in_chroot(),
-        )?;
+        write_sudoers(ctx, "/etc/sudoers.d/10-wheel", "%wheel ALL=(ALL:ALL) ALL\n")?;
         Ok(())
     }
 }

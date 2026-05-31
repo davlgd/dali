@@ -82,6 +82,8 @@ pub mod stack {
     /// Services enabled only when the default app set is installed (their units
     /// ship with `avahi` / `docker` / `openssh`). Sorted.
     pub const APP_SERVICES: &[&str] = &["avahi-daemon.service", "docker.service", "sshd.service"];
+    /// Tools installed globally during provisioning via `mise use -g`. Sorted.
+    pub const MISE_GLOBAL_TOOLS: &[&str] = &["bun", "codex", "gemini", "node", "opencode", "pi"];
 }
 
 /// A secret string (e.g. a password) that never reveals itself in `Debug`
@@ -164,13 +166,16 @@ pub struct InstallConfig {
     /// Empty by default — `pamac-aur` was dropped as it currently needs an
     /// older `libalpm` than Arch ships; add packages here once compatible.
     pub aur_packages: Vec<String>,
-    /// Enable a compressed RAM swap device (zram) sized to available memory.
+    /// Enable a compressed RAM swap device (zram) sized to total RAM, capped at
+    /// 8 GiB.
     pub zram_swap: bool,
     /// Install the curated [`stack::DEFAULT_APPS`] set and enable their services
-    /// (docker, avahi). Disable for a bare bootable system.
+    /// ([`stack::APP_SERVICES`]: docker, avahi, sshd). Disable for a bare
+    /// bootable system.
     pub default_apps: bool,
-    /// Run the post-install provisioning: AUR packages ([`stack::AUR_PACKAGES`])
-    /// and the `mise` / Claude Code installers. Best-effort and network-bound.
+    /// Run the post-install provisioning: AUR packages (from
+    /// [`Self::aur_packages`]) and the `mise` / Claude Code installers.
+    /// Best-effort and network-bound.
     pub provision: bool,
 }
 
@@ -275,18 +280,24 @@ impl InstallConfig {
     }
 }
 
-/// GitHub usernames: 1–39 chars, alphanumeric or single hyphens, not
-/// starting/ending with a hyphen. Validated so the `.keys` URL is well-formed.
-fn validate_github_user(name: &str) -> Result<()> {
-    let valid = (1..=39).contains(&name.len())
+/// A DNS-label-style name: 1..=`max_len` chars, ASCII-alphanumeric or hyphen,
+/// not starting/ending with a hyphen. `kind` labels the error message.
+fn validate_dns_label(name: &str, max_len: usize, kind: &str) -> Result<()> {
+    let valid = (1..=max_len).contains(&name.len())
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
         && !name.starts_with('-')
         && !name.ends_with('-');
     if valid {
         Ok(())
     } else {
-        Err(Error::Config(format!("invalid GitHub username `{name}`")))
+        Err(Error::Config(format!("invalid {kind} `{name}`")))
     }
+}
+
+/// GitHub usernames: 1–39 chars, alphanumeric or single hyphens, not
+/// starting/ending with a hyphen. Validated so the `.keys` URL is well-formed.
+fn validate_github_user(name: &str) -> Result<()> {
+    validate_dns_label(name, 39, "GitHub username")
 }
 
 /// Package names: non-empty, and limited to pacman's allowed characters so a
@@ -305,15 +316,7 @@ fn validate_package_name(name: &str) -> Result<()> {
 
 /// Hostnames: 1–63 chars, alphanumeric or hyphen, not starting/ending with a hyphen.
 fn validate_hostname(name: &str) -> Result<()> {
-    let valid = (1..=63).contains(&name.len())
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-        && !name.starts_with('-')
-        && !name.ends_with('-');
-    if valid {
-        Ok(())
-    } else {
-        Err(Error::Config(format!("invalid hostname `{name}`")))
-    }
+    validate_dns_label(name, 63, "hostname")
 }
 
 /// Linux usernames: start with a lowercase letter or underscore, followed by

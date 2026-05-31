@@ -1,9 +1,8 @@
 //! Step — append the opinionated shell environment (aliases, helper functions,
-//! PATH) to the primary user's `~/.bashrc`.
+//! PATH) to the primary user's `~/.bashrc`, and put `~/.local/bin` on `PATH`
+//! system-wide via `/etc/profile.d`.
 //!
 //! Deterministic and offline, so it always runs (independent of `provision`).
-//! macOS-isms from the source dotfile (`pbcopy`) are shimmed onto Linux
-//! clipboard tools.
 
 use super::{Context, Step};
 use crate::error::Result;

@@ -1,4 +1,4 @@
-//! Step 10 — best-effort post-install provisioning: AUR packages plus the
+//! Step — best-effort post-install provisioning: AUR packages plus the
 //! `mise` and Claude Code installer scripts.
 //!
 //! This step is **best-effort and network-bound**: everything here runs as the
@@ -6,7 +6,8 @@
 //! warning rather than aborting — the system is already bootable by this point.
 //! It is skipped entirely when `provision` is false.
 
-use super::{Context, Step};
+use super::{Context, Step, write_sudoers};
+use crate::config::stack;
 use crate::error::Result;
 use crate::system::{Command, target_path};
 
@@ -38,16 +39,7 @@ impl Step for Provision {
 
         // makepkg/paru must install build results without an interactive sudo
         // password; grant it temporarily and revoke it at the end.
-        ctx.sys.write(
-            &target_path(NOPASSWD_DROPIN),
-            "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n",
-        )?;
-        ctx.sys.run(
-            &Command::new("chmod")
-                .arg("0440")
-                .arg(NOPASSWD_DROPIN)
-                .in_chroot(),
-        )?;
+        write_sudoers(ctx, NOPASSWD_DROPIN, "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n")?;
 
         // 1. Bootstrap the paru AUR helper (prebuilt, no compile), then use it
         //    to resolve and install the AUR package set.
@@ -92,7 +84,10 @@ impl Step for Provision {
             "installing global tools via mise",
             &user_sh(
                 &user,
-                "~/.local/bin/mise use -g bun codex gemini node opencode pi",
+                &format!(
+                    "~/.local/bin/mise use -g {}",
+                    stack::MISE_GLOBAL_TOOLS.join(" ")
+                ),
             ),
         );
         best_effort(

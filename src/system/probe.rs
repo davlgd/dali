@@ -210,6 +210,33 @@ fn keymap_name(filename: &str) -> Option<&str> {
         .or_else(|| filename.strip_suffix(".map"))
 }
 
+/// Whether a console keymap of the given name exists under the kbd keymaps
+/// tree. Backed by [`list_keymaps`], so the two never disagree.
+pub fn keymap_exists(keymap: &str) -> bool {
+    list_keymaps().iter().any(|k| k == keymap)
+}
+
+/// Whether `disk` (or any of its partitions) appears as a mount source in
+/// `/proc/mounts`. Conservative: on read failure it reports "not mounted".
+pub fn disk_is_mounted(disk: &str) -> bool {
+    let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
+        return false;
+    };
+    // A mount source is either the disk itself or one of its partitions
+    // (`/dev/vda1`, `/dev/nvme0n1p2`, …). Require the suffix after the disk
+    // name to start with a digit or `p` so `/dev/sda` does not match a
+    // distinct `/dev/sdaa`.
+    mounts
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .any(|source| {
+            source == disk
+                || source
+                    .strip_prefix(disk)
+                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit() || c == 'p'))
+        })
+}
+
 /// Available timezones in `Region/City` form, e.g. `Europe/Paris`, sorted.
 /// Empty off Arch.
 pub fn list_timezones() -> Vec<String> {

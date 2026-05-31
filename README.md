@@ -1,10 +1,9 @@
 # DALI — Davlgd Arch Linux Installer
 
 DALI is an **opinionated, single-binary installer for Arch Linux**. Where
-[`archinstall`](https://github.com/archlinux/archinstall) offers every option,
-DALI makes the good choices for you and gets out of the way: download one
-static binary, run it from the live ISO, answer a handful of questions, reboot
-into a working system.
+[`archinstall`](https://github.com/archlinux/archinstall) exposes every option,
+DALI commits to one specific configuration: download one static binary, run it
+from the live ISO, answer a handful of questions, reboot into a working system.
 
 > ⚠️ DALI **erases the target disk**. It is meant to be run from the official
 > Arch Linux live ISO on a machine you intend to install onto.
@@ -27,12 +26,13 @@ get wrong:
 
 The only things you choose are: the **disk**, **hostname**, **username +
 password**, optional **root password**, **locale**, **keymap**, **timezone**,
-the zram toggle and any **extra packages**. Everything else is decided for you.
+the zram toggle and any **extra packages**. Everything else is fixed by DALI's
+opinionated stack.
 
 More precisely, every install gets:
 
-- **Base packages**: `base`, `linux`, `linux-firmware`, `btrfs-progs`,
-  `networkmanager`, `sudo`, `vim`, `git`, `base-devel`, `curl` — plus the
+- **Base packages**: `base`, `base-devel`, `btrfs-progs`, `curl`, `git`,
+  `linux`, `linux-firmware`, `networkmanager`, `sudo`, `vim` — plus the
   matching CPU microcode (`intel-ucode`/`amd-ucode`), `zram-generator` when zram
   is on, and any extras you list.
 - **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
@@ -199,7 +199,8 @@ test, and a real bootable QEMU/KVM install. See
 
 The crate is split into small, single-responsibility modules:
 
-- `config` — the single source of truth describing *what* to install.
+- `config` — the opinionated install spec (host-specific bits like CPU
+  microcode are probed at install time, not stored here).
 - `system` — the **effects boundary** (`Sys` trait): run a command, write a
   file, or merely record a dry-run plan. This one seam is what makes DALI both
   safe to rehearse and easy to test. Read-only inspection lives in

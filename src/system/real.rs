@@ -24,15 +24,20 @@ impl RealSys {
             source,
         }
     }
-}
 
-impl Sys for RealSys {
-    fn run(&self, command: &Command) -> Result<()> {
+    /// Spawn `command`, feed any `stdin` payload, wait, and map a non-zero exit
+    /// to [`Error::Command`]. `capture_stdout` pipes stdout (so the caller can
+    /// read it); without it stdout is inherited. stderr is always piped for the
+    /// error message.
+    fn exec(command: &Command, capture_stdout: bool) -> Result<std::process::Output> {
         let mut os = Self::build(command);
+        if capture_stdout {
+            os.stdout(Stdio::piped());
+        }
+        os.stderr(Stdio::piped());
         if command.stdin.is_some() {
             os.stdin(Stdio::piped());
         }
-        os.stderr(Stdio::piped());
 
         let mut child = os.spawn().map_err(|e| Self::spawn_error(command, e))?;
         if let Some(data) = &command.stdin
@@ -46,7 +51,7 @@ impl Sys for RealSys {
             .map_err(|e| Self::spawn_error(command, e))?;
 
         if output.status.success() {
-            Ok(())
+            Ok(output)
         } else {
             Err(Error::Command {
                 command: command.to_string(),
@@ -55,37 +60,17 @@ impl Sys for RealSys {
             })
         }
     }
+}
+
+impl Sys for RealSys {
+    fn run(&self, command: &Command) -> Result<()> {
+        Self::exec(command, false).map(|_| ())
+    }
 
     fn capture(&self, command: &Command) -> Result<String> {
-        let mut os = Self::build(command);
-        // Both stdout (the value we want) and stderr must be piped so
-        // `wait_with_output` actually collects them; an un-piped stdout is
-        // inherited and `output.stdout` comes back empty.
-        os.stdout(Stdio::piped());
-        os.stderr(Stdio::piped());
-        if command.stdin.is_some() {
-            os.stdin(Stdio::piped());
-        }
-        let mut child = os.spawn().map_err(|e| Self::spawn_error(command, e))?;
-        if let Some(data) = &command.stdin
-            && let Some(mut sink) = child.stdin.take()
-        {
-            sink.write_all(data.as_bytes())
-                .map_err(|e| Self::spawn_error(command, e))?;
-        }
-        let output = child
-            .wait_with_output()
-            .map_err(|e| Self::spawn_error(command, e))?;
-
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-        } else {
-            Err(Error::Command {
-                command: command.to_string(),
-                status: output.status,
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-            })
-        }
+        // stdout must be piped (not inherited) or `output.stdout` comes back
+        // empty — which once produced an unbootable install (empty root UUID).
+        Self::exec(command, true).map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
     }
 
     fn write(&self, path: &str, contents: &str) -> Result<()> {

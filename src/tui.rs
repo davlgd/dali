@@ -81,10 +81,20 @@ impl Field {
     }
 
     fn pick(label: &'static str, hint: &'static str, options: Vec<String>) -> Self {
+        Self::pick_with(label, hint, options, 0)
+    }
+
+    /// A `Pick` field with an explicit initially-selected `index`.
+    fn pick_with(
+        label: &'static str,
+        hint: &'static str,
+        options: Vec<String>,
+        index: usize,
+    ) -> Self {
         Self {
             label,
             hint,
-            kind: Kind::Pick { options, index: 0 },
+            kind: Kind::Pick { options, index },
         }
     }
 
@@ -177,14 +187,12 @@ impl Wizard {
 
         // options are ["yes", "no"]: index 0 when zram is on, 1 when off.
         let zram_default = usize::from(!initial.zram_swap);
-        let mut zram = Field::pick(
+        let zram = Field::pick_with(
             "Zram swap",
             "← → compressed RAM swap",
             vec!["yes".to_owned(), "no".to_owned()],
+            zram_default,
         );
-        if let Kind::Pick { index, .. } = &mut zram.kind {
-            *index = zram_default;
-        }
 
         let fields = vec![
             disk_field,
@@ -396,12 +404,10 @@ impl Wizard {
             }
             KeyCode::Enter => {
                 let typed = self.confirm.clone().unwrap_or_default();
-                let typed = typed.trim();
-                let disk = self.disk_value();
-                let basename = disk.rsplit('/').next().unwrap_or(&disk);
-                if typed == basename || typed == disk || typed.eq_ignore_ascii_case("yes") {
+                if self.confirm_accepts(typed.trim()) {
                     return self.pending.take();
                 }
+                let basename = self.disk_basename();
                 self.error = Some(format!("type `{basename}` (or yes) to confirm the wipe"));
             }
             _ => {}
@@ -689,21 +695,35 @@ impl Wizard {
         lines
     }
 
+    /// The target disk's basename, e.g. `/dev/vda` → `vda` (the short form the
+    /// user types to confirm the wipe).
+    fn disk_basename(&self) -> String {
+        let disk = self.disk_value();
+        disk.rsplit('/').next().unwrap_or(&disk).to_owned()
+    }
+
+    /// Whether `typed` is an accepted wipe confirmation: the disk basename, the
+    /// full disk path, or `yes` (case-insensitive).
+    fn confirm_accepts(&self, typed: &str) -> bool {
+        typed == self.disk_basename()
+            || typed == self.disk_value()
+            || typed.eq_ignore_ascii_case("yes")
+    }
+
     /// The contents of the confirmation modal: a full summary of what will be
     /// erased and installed, plus the typed-confirmation prompt.
     fn confirm_lines(&self) -> Vec<Line<'static>> {
         let disk = self.disk_value();
-        let basename = disk.rsplit('/').next().unwrap_or(&disk).to_owned();
+        let basename = self.disk_basename();
         let root_state = if self.text(ROOT_PW).is_empty() {
             "locked (sudo only)"
         } else {
             "password set"
         };
         let extras = self.text(EXTRA);
-        let extras = if extras.trim().is_empty() {
-            "none".to_owned()
-        } else {
-            extras.trim().to_owned()
+        let extras = match extras.trim() {
+            "" => "none",
+            s => s,
         };
         let typed = self.confirm.clone().unwrap_or_default();
 

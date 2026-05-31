@@ -178,7 +178,7 @@ fn pre_wipe_checks(config: &InstallConfig) -> Result<()> {
     }
 
     // Never erase a disk that currently backs a mounted filesystem.
-    if disk_is_mounted(&config.disk) {
+    if probe::disk_is_mounted(&config.disk) {
         return Err(Error::Config(format!(
             "`{}` or one of its partitions is mounted — refusing to erase it",
             config.disk
@@ -195,7 +195,7 @@ fn pre_wipe_checks(config: &InstallConfig) -> Result<()> {
         &format!("/usr/share/i18n/locales/{locale_base}"),
         &format!("unknown locale `{}`", config.locale),
     )?;
-    if !keymap_exists(&config.keymap) {
+    if !probe::keymap_exists(&config.keymap) {
         return Err(Error::Config(format!(
             "unknown console keymap `{}`",
             config.keymap
@@ -211,53 +211,6 @@ fn require_exists(path: &str, message: &str) -> Result<()> {
     } else {
         Err(Error::Config(format!("{message} (no {path})")))
     }
-}
-
-/// Whether `disk` (or any of its partitions) appears as a mount source in
-/// `/proc/mounts`. Conservative: on read failure it reports "not mounted".
-fn disk_is_mounted(disk: &str) -> bool {
-    let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
-        return false;
-    };
-    // A mount source is either the disk itself or one of its partitions
-    // (`/dev/vda1`, `/dev/nvme0n1p2`, …). Require the suffix after the disk
-    // name to start with a digit or `p` so `/dev/sda` does not match a
-    // distinct `/dev/sdaa`.
-    mounts
-        .lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .any(|source| {
-            source == disk
-                || source
-                    .strip_prefix(disk)
-                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit() || c == 'p'))
-        })
-}
-
-/// Whether a console keymap of the given name exists under the kbd keymaps tree.
-fn keymap_exists(keymap: &str) -> bool {
-    fn search(dir: &Path, target: &str) -> bool {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return false;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if search(&path, target) {
-                    return true;
-                }
-            } else {
-                // keymaps are stored as "<name>.map.gz" (or ".map").
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                if name == format!("{target}.map.gz") || name == format!("{target}.map") {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-    search(Path::new("/usr/share/kbd/keymaps"), keymap)
 }
 
 /// Persist a configuration to disk (used by `--save-config`).
@@ -280,9 +233,11 @@ fn save_config(config: &InstallConfig, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Final, explicit confirmation before destroying data. Shows every decision
-/// that materially changes the resulting system — but never the passwords
-/// themselves — so the user gives informed consent before the disk is erased.
+/// Final, explicit confirmation before destroying data. Shows the key
+/// destructive choices — target disk, identity, localization, root state, zram
+/// and extra packages — but never the passwords themselves, so the user gives
+/// informed consent before the disk is erased. (SSH key import is listed in the
+/// interactive TUI summary rather than here.)
 fn confirm(config: &InstallConfig, online: bool, source: Option<&Path>) -> Result<bool> {
     println!("\nAbout to ERASE {} and install Arch Linux:", config.disk);
     if let Some(path) = source {

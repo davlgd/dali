@@ -119,6 +119,10 @@ pub trait Sys {
     /// The dry-run implementation returns an empty string (it performs
     /// nothing), so a step that branches on captured output must guard with
     /// [`Self::is_real`] — see `steps::bootloader` for the pattern.
+    ///
+    /// Like [`Self::run`], any `stdin` payload is assumed small: it is written
+    /// in full before the child's output is drained, so piping more than a pipe
+    /// buffer (~64 KiB) could deadlock.
     fn capture(&self, command: &Command) -> Result<String>;
 
     /// Write `contents` to `path` on the live system, replacing any existing

@@ -27,6 +27,13 @@ impl DrySys {
         println!("  {line}");
         self.actions.borrow_mut().push(line);
     }
+
+    /// Record a content-writing action (`write`/`append`) with a size summary.
+    fn record_content(&self, verb: &str, path: &str, contents: &str) {
+        let bytes = contents.len();
+        let lines = contents.lines().count();
+        self.record(format!("{verb}: {path} ({bytes} bytes, {lines} lines)"));
+    }
 }
 
 impl Sys for DrySys {
@@ -41,9 +48,7 @@ impl Sys for DrySys {
     }
 
     fn write(&self, path: &str, contents: &str) -> Result<()> {
-        let bytes = contents.len();
-        let lines = contents.lines().count();
-        self.record(format!("write: {path} ({bytes} bytes, {lines} lines)"));
+        self.record_content("write", path, contents);
         Ok(())
     }
 
@@ -53,9 +58,7 @@ impl Sys for DrySys {
     }
 
     fn append(&self, path: &str, contents: &str) -> Result<()> {
-        let bytes = contents.len();
-        let lines = contents.lines().count();
-        self.record(format!("append: {path} ({bytes} bytes, {lines} lines)"));
+        self.record_content("append", path, contents);
         Ok(())
     }
 
