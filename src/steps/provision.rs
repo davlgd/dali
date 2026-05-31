@@ -61,6 +61,18 @@ impl Step for Provision {
             );
         }
 
+        // Enable the kernel-modules-hook service (from the AUR package above) so
+        // module loading keeps working after a kernel upgrade, before reboot.
+        // best_effort: a no-op if the package was not installed.
+        best_effort(
+            ctx,
+            "enabling linux-modules-cleanup.service",
+            &Command::new("systemctl")
+                .arg("enable")
+                .arg("linux-modules-cleanup.service")
+                .in_chroot(),
+        );
+
         // 2. Build the V compiler from source and symlink it into ~/.local/bin.
         best_effort(
             ctx,
@@ -125,5 +137,30 @@ fn best_effort(ctx: &mut Context<'_>, what: &str, command: &Command) {
     ctx.info(what);
     if let Err(e) = ctx.sys.run(command) {
         ctx.info(format!("warning: {what} failed (continuing): {e}"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn installs_default_aur_package_and_enables_modules_cleanup() {
+        // config() has provision = true and the default aur_packages.
+        let actions = dry_actions(&Provision, &config());
+        assert!(actions.iter().any(|a| a.contains("kernel-modules-hook")));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("systemctl enable linux-modules-cleanup.service"))
+        );
+    }
+
+    #[test]
+    fn provision_disabled_does_nothing() {
+        let mut cfg = config();
+        cfg.provision = false;
+        assert!(dry_actions(&Provision, &cfg).is_empty());
     }
 }

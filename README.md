@@ -60,10 +60,12 @@ More precisely, every install gets:
   from source into `~/.local/bin`, runs the [`mise`](https://mise.jdx.dev) and
   [Claude Code](https://claude.com/claude-code) installers as your user, and
   installs `bun`, `codex`, `gemini`, `node`, `opencode` and `pi` globally via
-  `mise`. Network-bound; failures are reported as warnings and never abort the
-  (already bootable) install. (`pamac-aur` is intentionally not in the defaults
-  — it currently needs an older `libalpm` than Arch ships; add it to
-  `aur_packages` once it is compatible again.)
+  `mise`. By default it also installs the `kernel-modules-hook` AUR package
+  (keeps the running kernel's modules across an upgrade) and enables
+  `linux-modules-cleanup.service`. Network-bound; failures are reported as
+  warnings and never abort the (already bootable) install. (`pamac-aur` is
+  intentionally not in the defaults — it currently needs an older `libalpm`
+  than Arch ships; add it to `aur_packages` once it is compatible again.)
 - **System tuning** (always applied): `fs.inotify.max_user_watches = 524288`
   (a dev box exhausts the default almost immediately) and a systemd
   `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and

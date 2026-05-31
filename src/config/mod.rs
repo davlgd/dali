@@ -57,8 +57,9 @@ pub struct InstallConfig {
     /// Extra packages to install on top of [`stack::BASE_PACKAGES`].
     pub extra_packages: Vec<String>,
     /// AUR packages to install during provisioning via the bootstrapped `paru`.
-    /// Empty by default — `pamac-aur` was dropped as it currently needs an
-    /// older `libalpm` than Arch ships; add packages here once compatible.
+    /// Defaults to [`stack::DEFAULT_AUR_PACKAGES`] (`kernel-modules-hook`); add
+    /// your own here. (`pamac-aur` is intentionally excluded — it currently
+    /// needs an older `libalpm` than Arch ships.)
     pub aur_packages: Vec<String>,
     /// Enable a compressed RAM swap device (zram) sized to total RAM, capped at
     /// 8 GiB.
@@ -89,7 +90,10 @@ impl Default for InstallConfig {
             root_password: Secret::default(),
             github_user: String::new(),
             extra_packages: Vec::new(),
-            aur_packages: Vec::new(),
+            aur_packages: stack::DEFAULT_AUR_PACKAGES
+                .iter()
+                .map(|p| (*p).to_owned())
+                .collect(),
             zram_swap: true,
             default_apps: true,
             provision: true,
@@ -310,6 +314,16 @@ mod tests {
         let toml = config_with("/dev/vda", "pw").to_toml().unwrap();
         assert!(toml.contains("[user]"), "expected a [user] table:\n{toml}");
         assert!(toml::from_str::<InstallConfig>(&toml).is_ok());
+    }
+
+    #[test]
+    fn default_aur_packages_include_the_kernel_modules_hook() {
+        assert!(
+            InstallConfig::default()
+                .aur_packages
+                .iter()
+                .any(|p| p == "kernel-modules-hook")
+        );
     }
 
     #[test]
