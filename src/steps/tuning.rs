@@ -20,12 +20,26 @@ impl Step for Tuning {
         ctx.sys.write(
             &target_path("/etc/sysctl.d/90-dali-inotify.conf"),
             INOTIFY_CONF,
+        )?;
+
+        // Raise the open-file-descriptor ceiling for system and user services
+        // (databases, servers, node hit the default quickly).
+        ctx.info("raising the systemd DefaultLimitNOFILE");
+        ctx.sys.write(
+            &target_path("/etc/systemd/system.conf.d/90-dali-nofile.conf"),
+            NOFILE_LIMITS,
+        )?;
+        ctx.sys.write(
+            &target_path("/etc/systemd/user.conf.d/90-dali-nofile.conf"),
+            NOFILE_LIMITS,
         )
     }
 }
 
 /// inotify watch limit, well above the kernel default of 8192.
 const INOTIFY_CONF: &str = "fs.inotify.max_user_watches = 524288\n";
+/// systemd file-descriptor limit (soft:hard) for system and user managers.
+const NOFILE_LIMITS: &str = "[Manager]\nDefaultLimitNOFILE=65536:524288\n";
 
 #[cfg(test)]
 mod tests {
@@ -45,5 +59,25 @@ mod tests {
     #[test]
     fn inotify_limit_value() {
         assert!(INOTIFY_CONF.contains("fs.inotify.max_user_watches = 524288"));
+    }
+
+    #[test]
+    fn systemd_nofile_dropins_are_written() {
+        let actions = dry_actions(&Tuning, &config());
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/etc/systemd/system.conf.d/90-dali-nofile.conf"))
+        );
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/etc/systemd/user.conf.d/90-dali-nofile.conf"))
+        );
+    }
+
+    #[test]
+    fn nofile_limit_value() {
+        assert!(NOFILE_LIMITS.contains("DefaultLimitNOFILE=65536:524288"));
     }
 }
