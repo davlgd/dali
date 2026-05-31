@@ -77,12 +77,8 @@ pub const SERVICES: &[&str] = &[
 pub const APP_SERVICES: &[&str] = &["avahi-daemon.service", "docker.service", "sshd.service"];
 /// Tools installed globally during provisioning via `mise use -g`. Sorted.
 pub const MISE_GLOBAL_TOOLS: &[&str] = &["bun", "codex", "gemini", "node", "opencode", "pi"];
-/// AUR packages installed by default during provisioning (via `paru`).
-/// `kernel-modules-hook` keeps the running kernel's modules across an upgrade,
-/// so `modprobe` still works before the next reboot.
-pub const DEFAULT_AUR_PACKAGES: &[&str] = &["kernel-modules-hook"];
-/// GnuPG dirmngr config: several keyservers and a short connect timeout, so key
-/// imports (pacman-key, and `paru`'s AUR builds) don't hang on a dead server.
+/// GnuPG dirmngr config: several keyservers and a short connect timeout, so
+/// `pacman-key` doesn't hang on a dead server.
 pub const DIRMNGR_CONF: &str = "\
 keyserver hkps://keys.openpgp.org
 keyserver hkps://keyserver.ubuntu.com

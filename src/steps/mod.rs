@@ -248,7 +248,7 @@ mod tests {
                 "Enable services",
                 "Configure snapshots (snapper)",
                 "Apply system tuning",
-                "Provision extras (AUR, mise, Claude Code)",
+                "Provision extras (V, mise, Claude Code)",
             ]
         );
     }

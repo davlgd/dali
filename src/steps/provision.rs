@@ -1,5 +1,5 @@
-//! Step — best-effort post-install provisioning: AUR packages plus the
-//! `mise` and Claude Code installer scripts.
+//! Step — best-effort post-install provisioning: the V compiler, the `mise`
+//! and Claude Code installer scripts, and any user-supplied `custom_commands`.
 //!
 //! This step is **best-effort and network-bound**: everything here runs as the
 //! freshly created user inside the target, and any failure is reported as a
@@ -14,12 +14,12 @@ use crate::system::{Command, target_path};
 /// Sudoers drop-in granting passwordless sudo during provisioning only.
 const NOPASSWD_DROPIN: &str = "/etc/sudoers.d/99-dali-provision";
 
-/// Installs AUR packages (via a bootstrapped `paru`) and per-user tools.
+/// Builds the V compiler and runs the per-user tool installers.
 pub struct Provision;
 
 impl Step for Provision {
     fn name(&self) -> &'static str {
-        "Provision extras (AUR, mise, Claude Code)"
+        "Provision extras (V, mise, Claude Code)"
     }
 
     fn run(&self, ctx: &mut Context<'_>) -> Result<()> {
@@ -37,43 +37,11 @@ impl Step for Provision {
             "nameserver 9.9.9.9\nnameserver 1.1.1.1\n",
         )?;
 
-        // makepkg/paru must install build results without an interactive sudo
-        // password; grant it temporarily and revoke it at the end.
+        // `custom_commands` may use sudo; grant the wheel group passwordless
+        // sudo for the duration and revoke it at the end.
         write_sudoers(ctx, NOPASSWD_DROPIN, "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n")?;
 
-        // 1. Bootstrap the paru AUR helper (prebuilt, no compile), then use it
-        //    to resolve and install the AUR package set.
-        best_effort(
-            ctx,
-            "bootstrapping the paru AUR helper",
-            &user_sh(
-                &user,
-                "rm -rf /tmp/paru-bin && \
-                 git clone --depth 1 https://aur.archlinux.org/paru-bin.git /tmp/paru-bin && \
-                 cd /tmp/paru-bin && makepkg -si --noconfirm",
-            ),
-        );
-        for pkg in ctx.config.aur_packages.clone() {
-            best_effort(
-                ctx,
-                &format!("installing AUR package {pkg}"),
-                &user_sh(&user, &format!("paru -S --noconfirm --skipreview {pkg}")),
-            );
-        }
-
-        // Enable the kernel-modules-hook service (from the AUR package above) so
-        // module loading keeps working after a kernel upgrade, before reboot.
-        // best_effort: a no-op if the package was not installed.
-        best_effort(
-            ctx,
-            "enabling linux-modules-cleanup.service",
-            &Command::new("systemctl")
-                .arg("enable")
-                .arg("linux-modules-cleanup.service")
-                .in_chroot(),
-        );
-
-        // 2. Build the V compiler from source and symlink it into ~/.local/bin.
+        // 1. Build the V compiler from source and symlink it into ~/.local/bin.
         best_effort(
             ctx,
             "building the V compiler",
@@ -85,7 +53,7 @@ impl Step for Provision {
             ),
         );
 
-        // 3. Per-user tool installers (write into the user's home).
+        // 2. Per-user tool installers (write into the user's home).
         best_effort(
             ctx,
             "installing mise",
@@ -108,7 +76,7 @@ impl Step for Provision {
             &user_sh(&user, "curl -fsSL https://claude.ai/install.sh | bash"),
         );
 
-        // 4. User-supplied commands, while passwordless sudo is still granted.
+        // 3. User-supplied commands, while passwordless sudo is still granted.
         for cmd in ctx.config.custom_commands.clone() {
             let cmd = cmd.trim();
             if cmd.is_empty() {
@@ -159,15 +127,10 @@ mod tests {
     use crate::steps::test_support::{config, dry_actions};
 
     #[test]
-    fn installs_default_aur_package_and_enables_modules_cleanup() {
-        // config() has provision = true and the default aur_packages.
+    fn provision_builds_v_and_installs_user_tools() {
         let actions = dry_actions(&Provision, &config());
-        assert!(actions.iter().any(|a| a.contains("kernel-modules-hook")));
-        assert!(
-            actions
-                .iter()
-                .any(|a| a.contains("systemctl enable linux-modules-cleanup.service"))
-        );
+        assert!(actions.iter().any(|a| a.contains("vlang/v")));
+        assert!(actions.iter().any(|a| a.contains("mise use -g")));
     }
 
     #[test]

@@ -50,26 +50,21 @@ More precisely, every install gets:
   deliberately not snapshotted.
 - **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
   `mise` activation, helper functions (`check`, `clean_cargo`, `f`, `mkcd`, `up`,
-  `w` — `up` updates the system + AUR, mise tools, global bun packages, uv
-  tools and the V compiler in one go)
+  `w` — `up` updates the system, mise tools, global bun packages, uv tools and
+  the V compiler in one go)
   and aliases (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
   `dps`, `myip`, `pgen`). The block is marker-delimited, so re-running replaces
   it in place (with a one-time `~/.bashrc.dali.bak` backup) instead of appending
   a duplicate.
-- **Provisioning** (`provision`, on by default, best-effort): bootstraps the
-  [`paru`](https://github.com/Morganamilo/paru) AUR helper, installs any
-  `aur_packages` you list through it, builds the [V compiler](https://vlang.io)
-  from source into `~/.local/bin`, runs the [`mise`](https://mise.jdx.dev) and
-  [Claude Code](https://claude.com/claude-code) installers as your user, and
-  installs `bun`, `codex`, `gemini`, `node`, `opencode` and `pi` globally via
-  `mise`. By default it also installs the `kernel-modules-hook` AUR package
-  (keeps the running kernel's modules across an upgrade) and enables
-  `linux-modules-cleanup.service`. Network-bound; failures are reported as
-  warnings and never abort the (already bootable) install. (`pamac-aur` is
-  intentionally not in the defaults — it currently needs an older `libalpm`
-  than Arch ships; add it to `aur_packages` once it is compatible again.) Any
+- **Provisioning** (`provision`, on by default, best-effort): builds the
+  [V compiler](https://vlang.io) from source into `~/.local/bin`, runs the
+  [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
+  installers as your user, and installs `bun`, `codex`, `gemini`, `node`,
+  `opencode` and `pi` globally via `mise`. Network-bound; failures are reported
+  as warnings and never abort the (already bootable) install. Any
   `custom_commands` you list run as your user inside the target at the end of
-  this step.
+  this step. (AUR provisioning is currently disabled: the prebuilt `paru-bin`
+  and `pamac-aur` both link an older `libalpm` than Arch ships.)
 - **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists` are
   enabled — on the live system before `pacstrap` (faster install) and in the
   target so it persists.
@@ -77,8 +72,7 @@ More precisely, every install gets:
   timezone's country (worldwide fallback), before `pacstrap` — so both the
   install and the installed system pull from fast mirrors. Best-effort.
 - **GnuPG keyservers**: `/etc/gnupg/dirmngr.conf` is set with several keyservers
-  and a short connect timeout, so key imports (pacman-key and `paru`'s AUR
-  builds) don't hang on a dead server.
+  and a short connect timeout, so `pacman-key` doesn't hang on a dead server.
 - **Network carry-over**: the live ISO's NetworkManager/iwd profiles are copied
   into the target (mode `0600`), so a system installed over Wi-Fi reconnects
   after reboot without re-entering credentials. Best-effort.
@@ -105,8 +99,8 @@ More precisely, every install gets:
   `locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, `default_apps=true`,
   `provision=true`, and root **locked** (empty `root_password`).
 
-Set `"default_apps": false` for a bare bootable system, or `"provision": false`
-to skip the AUR/`mise`/Claude Code step. When a real install finishes, DALI
+Set `default_apps = false` for a bare bootable system, or `provision = false`
+to skip the V/`mise`/Claude Code step. When a real install finishes, DALI
 **reboots into the new system by default** (immediately with `--yes`, after a
 confirmation otherwise); pass `--no-reboot` to stay on the live environment.
 

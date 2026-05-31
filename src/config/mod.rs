@@ -56,11 +56,6 @@ pub struct InstallConfig {
     pub github_user: String,
     /// Extra packages to install on top of [`stack::BASE_PACKAGES`].
     pub extra_packages: Vec<String>,
-    /// AUR packages to install during provisioning via the bootstrapped `paru`.
-    /// Defaults to [`stack::DEFAULT_AUR_PACKAGES`] (`kernel-modules-hook`); add
-    /// your own here. (`pamac-aur` is intentionally excluded — it currently
-    /// needs an older `libalpm` than Arch ships.)
-    pub aur_packages: Vec<String>,
     /// Enable a compressed RAM swap device (zram) sized to total RAM, capped at
     /// 8 GiB.
     pub zram_swap: bool,
@@ -68,9 +63,8 @@ pub struct InstallConfig {
     /// ([`stack::APP_SERVICES`]: docker, avahi, sshd). Disable for a bare
     /// bootable system.
     pub default_apps: bool,
-    /// Run the post-install provisioning: AUR packages (from
-    /// [`Self::aur_packages`]) and the `mise` / Claude Code installers.
-    /// Best-effort and network-bound.
+    /// Run the post-install provisioning: the V compiler and the `mise` /
+    /// Claude Code installers. Best-effort and network-bound.
     pub provision: bool,
     /// Optional shell commands run as the user, inside the target, near the end
     /// of provisioning (best-effort). Requires [`Self::provision`].
@@ -93,10 +87,6 @@ impl Default for InstallConfig {
             root_password: Secret::default(),
             github_user: String::new(),
             extra_packages: Vec::new(),
-            aur_packages: stack::DEFAULT_AUR_PACKAGES
-                .iter()
-                .map(|p| (*p).to_owned())
-                .collect(),
             zram_swap: true,
             default_apps: true,
             provision: true,
@@ -213,7 +203,7 @@ impl InstallConfig {
         if self.timezone.trim().is_empty() {
             return Err(Error::Config("timezone must not be empty".into()));
         }
-        for package in self.extra_packages.iter().chain(&self.aur_packages) {
+        for package in &self.extra_packages {
             validate_package_name(package)?;
         }
         if !self.github_user.is_empty() {
@@ -318,16 +308,6 @@ mod tests {
         let toml = config_with("/dev/vda", "pw").to_toml().unwrap();
         assert!(toml.contains("[user]"), "expected a [user] table:\n{toml}");
         assert!(toml::from_str::<InstallConfig>(&toml).is_ok());
-    }
-
-    #[test]
-    fn default_aur_packages_include_the_kernel_modules_hook() {
-        assert!(
-            InstallConfig::default()
-                .aur_packages
-                .iter()
-                .any(|p| p == "kernel-modules-hook")
-        );
     }
 
     #[test]
