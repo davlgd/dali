@@ -3,6 +3,9 @@
 //! Keeping these as constants — rather than yet more knobs — is a deliberate
 //! KISS decision. This is the inventory file: what gets installed and enabled.
 
+/// The DALI version, used in the provenance marker and login banner.
+pub const DALI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Size of the EFI System Partition.
 pub const ESP_SIZE_MIB: u64 = 1024;
 /// The kernel package installed by default.

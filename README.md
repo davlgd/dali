@@ -85,6 +85,9 @@ More precisely, every install gets:
   (a dev box exhausts the default almost immediately) and a systemd
   `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and
   `net.ipv4.tcp_mtu_probing = 1` (robust SSH/transfers behind broken PMTUD).
+- **Provenance**: `/etc/dali-release` records that DALI provisioned the system
+  (and which version), and `/etc/os-release` gains additive `DALI_*` fields
+  while keeping `ID=arch` / `PRETTY_NAME="Arch Linux"` — it stays Arch.
 - **ESP**: FAT32, 1 GiB, mounted at `/boot`.
 - **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.

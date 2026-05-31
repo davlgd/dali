@@ -14,6 +14,7 @@ mod initramfs;
 mod localization;
 mod network;
 mod partition;
+mod provenance;
 mod provision;
 mod services;
 mod shell;
@@ -73,6 +74,7 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
         Box::new(fstab::GenerateFstab),
         Box::new(localization::Localization),
         Box::new(network::CarryNetwork),
+        Box::new(provenance::Provenance),
         Box::new(initramfs::Initramfs),
         Box::new(bootloader::Bootloader),
         Box::new(users::Users),
@@ -181,6 +183,7 @@ mod tests {
                 "Generate fstab",
                 "Configure localization",
                 "Carry network configuration",
+                "Write provenance marker",
                 "Build initramfs",
                 "Install bootloader",
                 "Create users",
