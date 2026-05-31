@@ -46,3 +46,23 @@ impl Step for Partition {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn lays_down_esp_and_root_with_correct_typecodes() {
+        let joined = dry_actions(&Partition, &config()).join("\n");
+        assert!(joined.contains("sgdisk --zap-all /dev/vda"));
+        assert!(joined.contains("wipefs --all /dev/vda"));
+        assert!(joined.contains("--new=1:0:+1024M"));
+        assert!(joined.contains("--typecode=1:ef00"), "ESP type code"); // EFI System
+        assert!(joined.contains("--new=2:0:0"));
+        assert!(joined.contains("--typecode=2:8304"), "Linux root type code");
+        // Re-read the table and wait for the device nodes before formatting.
+        assert!(joined.contains("partprobe /dev/vda"));
+        assert!(joined.contains("udevadm settle"));
+    }
+}

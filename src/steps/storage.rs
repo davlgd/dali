@@ -88,3 +88,33 @@ fn mount_subvol(device: &str, subvol: &str, mountpoint: &str) -> Command {
         .arg(device)
         .arg(mountpoint)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn mount_subvol_sets_subvolume_and_btrfs_options() {
+        let cmd = mount_subvol("/dev/vda2", "@home", "/mnt/home");
+        assert_eq!(
+            cmd.to_string(),
+            "mount -o subvol=@home,compress=zstd,noatime /dev/vda2 /mnt/home"
+        );
+    }
+
+    #[test]
+    fn formats_creates_every_subvolume_and_mounts_hardened_esp() {
+        let joined = dry_actions(&FormatAndMount, &config()).join("\n");
+        assert!(joined.contains("mkfs.fat -F32 -n EFI /dev/vda1"));
+        assert!(joined.contains("mkfs.btrfs -f -L root /dev/vda2"));
+        for subvol in ["@", "@home", "@log", "@pkg", "@snapshots"] {
+            assert!(
+                joined.contains(&format!("subvolume create /mnt/{subvol}")),
+                "missing subvolume {subvol}"
+            );
+        }
+        // ESP mounted at /boot with root-only fmask/dmask.
+        assert!(joined.contains("mount -o fmask=0077,dmask=0077 /dev/vda1 /mnt/boot"));
+    }
+}

@@ -119,11 +119,17 @@ fn prompt_yes_no(question: &str, default_yes: bool) -> Result<bool> {
     io::stdin()
         .read_line(&mut answer)
         .map_err(|e| Error::io("<stdin>", e))?;
+    Ok(parse_yes_no(&answer, default_yes))
+}
+
+/// Interpret a yes/no answer: empty (just-Enter) takes `default_yes`, otherwise
+/// only `y`/`yes` (any case) is a yes.
+fn parse_yes_no(answer: &str, default_yes: bool) -> bool {
     let answer = answer.trim().to_ascii_lowercase();
     if answer.is_empty() {
-        Ok(default_yes)
+        default_yes
     } else {
-        Ok(answer == "y" || answer == "yes")
+        answer == "y" || answer == "yes"
     }
 }
 
@@ -239,29 +245,9 @@ fn save_config(config: &InstallConfig, path: &Path) -> Result<()> {
 /// informed consent before the disk is erased. (SSH key import is listed in the
 /// interactive TUI summary rather than here.)
 fn confirm(config: &InstallConfig, online: bool, source: Option<&Path>) -> Result<bool> {
-    println!("\nAbout to ERASE {} and install Arch Linux:", config.disk);
-    if let Some(path) = source {
-        println!("  config   : {}", path.display());
-    }
-    println!("  hostname : {}", config.hostname);
-    println!("  user     : {}", config.user.username);
-    println!("  locale   : {} / keymap {}", config.locale, config.keymap);
-    println!("  timezone : {}", config.timezone);
-    let root_state = if config.root_password.is_empty() {
-        "locked (administration via sudo)"
-    } else {
-        "password set"
-    };
-    println!("  root     : {root_state}");
-    println!(
-        "  zram swap: {}",
-        if config.zram_swap { "on" } else { "off" }
-    );
-    if !config.extra_packages.is_empty() {
-        println!("  extras   : {}", config.extra_packages.join(", "));
-    }
-    if !online {
-        println!("  network  : NOT DETECTED — package installation will fail partway");
+    println!();
+    for line in confirm_summary(config, online, source) {
+        println!("{line}");
     }
     print!("\nType 'yes' to continue: ");
     io::stdout().flush().map_err(|e| Error::io("<stdout>", e))?;
@@ -271,4 +257,96 @@ fn confirm(config: &InstallConfig, online: bool, source: Option<&Path>) -> Resul
         .read_line(&mut answer)
         .map_err(|e| Error::io("<stdin>", e))?;
     Ok(answer.trim().eq_ignore_ascii_case("yes"))
+}
+
+/// The lines of the pre-install summary (everything but the typed prompt). The
+/// `config`/`extras` lines appear only when relevant, and the network warning
+/// only when offline.
+fn confirm_summary(config: &InstallConfig, online: bool, source: Option<&Path>) -> Vec<String> {
+    let mut lines = vec![format!(
+        "About to ERASE {} and install Arch Linux:",
+        config.disk
+    )];
+    if let Some(path) = source {
+        lines.push(format!("  config   : {}", path.display()));
+    }
+    lines.push(format!("  hostname : {}", config.hostname));
+    lines.push(format!("  user     : {}", config.user.username));
+    lines.push(format!(
+        "  locale   : {} / keymap {}",
+        config.locale, config.keymap
+    ));
+    lines.push(format!("  timezone : {}", config.timezone));
+    let root_state = if config.root_password.is_empty() {
+        "locked (administration via sudo)"
+    } else {
+        "password set"
+    };
+    lines.push(format!("  root     : {root_state}"));
+    lines.push(format!(
+        "  zram swap: {}",
+        if config.zram_swap { "on" } else { "off" }
+    ));
+    if !config.extra_packages.is_empty() {
+        lines.push(format!("  extras   : {}", config.extra_packages.join(", ")));
+    }
+    if !online {
+        lines.push("  network  : NOT DETECTED — package installation will fail partway".to_owned());
+    }
+    lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Secret;
+
+    #[test]
+    fn parse_yes_no_uses_default_on_empty_answer() {
+        assert!(parse_yes_no("", true));
+        assert!(!parse_yes_no("", false));
+        assert!(!parse_yes_no("   \n", false));
+    }
+
+    #[test]
+    fn parse_yes_no_accepts_only_y_or_yes() {
+        for yes in ["y", "Y", "yes", "YES", " Yes "] {
+            assert!(parse_yes_no(yes, false), "{yes:?} should read as yes");
+        }
+        for no in ["n", "no", "nope", "sure", "1"] {
+            assert!(!parse_yes_no(no, true), "{no:?} should read as no");
+        }
+    }
+
+    #[test]
+    fn confirm_summary_shows_core_choices_and_hides_optional_ones() {
+        let config = InstallConfig {
+            disk: "/dev/vda".to_owned(),
+            ..InstallConfig::default()
+        };
+        let joined = confirm_summary(&config, true, None).join("\n");
+        assert!(joined.contains("About to ERASE /dev/vda"));
+        assert!(joined.contains("root     : locked"));
+        assert!(joined.contains("zram swap: on"));
+        // Optional lines are absent on the default, online path.
+        assert!(!joined.contains("config   :"));
+        assert!(!joined.contains("extras   :"));
+        assert!(!joined.contains("network  :"));
+    }
+
+    #[test]
+    fn confirm_summary_includes_optional_lines_when_relevant() {
+        let config = InstallConfig {
+            disk: "/dev/sda".to_owned(),
+            root_password: Secret::new("rootpw"),
+            extra_packages: vec!["htop".to_owned(), "git".to_owned()],
+            ..InstallConfig::default()
+        };
+        let path = std::path::PathBuf::from("/tmp/cfg.json");
+        let joined = confirm_summary(&config, false, Some(&path)).join("\n");
+        assert!(joined.contains("config   : /tmp/cfg.json"));
+        assert!(joined.contains("root     : password set"));
+        assert!(joined.contains("extras   : htop, git"));
+        assert!(joined.contains("network  : NOT DETECTED"));
+    }
 }
