@@ -66,6 +66,9 @@ More precisely, every install gets:
   warnings and never abort the (already bootable) install. (`pamac-aur` is
   intentionally not in the defaults — it currently needs an older `libalpm`
   than Arch ships; add it to `aur_packages` once it is compatible again.)
+- **Network carry-over**: the live ISO's NetworkManager/iwd profiles are copied
+  into the target (mode `0600`), so a system installed over Wi-Fi reconnects
+  after reboot without re-entering credentials. Best-effort.
 - **Wireless regdom**: the regulatory domain is derived from the timezone's
   country (e.g. `Europe/Paris` → `FR`) and written to
   `/etc/conf.d/wireless-regdom`, so Wi-Fi uses the right channels/power.

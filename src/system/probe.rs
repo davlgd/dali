@@ -7,7 +7,7 @@
 
 use std::fmt;
 use std::net::{TcpStream, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// A block device the user can install onto.
@@ -157,6 +157,26 @@ fn read_model(base: &Path) -> Option<String> {
     }
 }
 
+/// Where NetworkManager stores connection profiles on the live system.
+pub const NM_CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
+/// Where iwd stores network profiles on the live system.
+pub const IWD_DIR: &str = "/var/lib/iwd";
+
+/// Regular files directly inside `dir`, sorted by path. Empty if `dir` is
+/// missing or unreadable.
+pub fn list_files_in(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .collect();
+    files.sort();
+    files
+}
+
 /// Available UTF-8 glibc locales, e.g. `en_US.UTF-8`, sorted. Empty off Arch.
 pub fn list_locales() -> Vec<String> {
     std::fs::read_to_string("/usr/share/i18n/SUPPORTED")
@@ -301,6 +321,11 @@ mod tests {
         assert_eq!(keymap_name("fr.map.gz"), Some("fr"));
         assert_eq!(keymap_name("us.map"), Some("us"));
         assert_eq!(keymap_name("README"), None);
+    }
+
+    #[test]
+    fn list_files_in_missing_dir_is_empty() {
+        assert!(list_files_in(Path::new("/nonexistent/dali/dir")).is_empty());
     }
 
     #[test]
