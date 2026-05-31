@@ -231,7 +231,7 @@ def phase_install(p: Prepared, work: Path) -> None:
     log("PHASE 1 complete — DALI reported a successful install")
 
 
-def phase_boot(p: Prepared, hostname: str, work: Path) -> None:
+def phase_boot(p: Prepared, hostname: str, root_password: str, work: Path) -> None:
     log("PHASE 2 — rebooting from the installed disk")
     args = [
         *common_machine(), *firmware(p),
@@ -240,9 +240,47 @@ def phase_boot(p: Prepared, hostname: str, work: Path) -> None:
     vm = Vm(args, work / "phase2.log")
     try:
         vm.expect(rf"{re.escape(hostname)} login:", timeout=180)
+        if root_password:
+            verify_installed_system(vm, hostname, root_password)
     finally:
         vm.kill()
-    log("PHASE 2 complete — installed system booted to a login prompt")
+    log("PHASE 2 complete — installed system booted and verified")
+
+
+# Each entry: (sentinel, shell test). The sentinel is printed only when the
+# test passes, so a missing sentinel in the captured output means a failure.
+INSTALLED_CHECKS = [
+    ("CHK_SNAPPER", "test -f /etc/snapper/configs/root"),
+    ("CHK_DISPATCHER", "test -x /etc/NetworkManager/dispatcher.d/90-dali-issue"),
+    ("CHK_INSTALL_LOG", "test -f /var/log/dali-install.log"),
+    ("CHK_STEP_LOG", "test -f /var/log/dali-steps.toml"),
+    ("CHK_OSRELEASE_ARCH", "grep -q '^ID=arch' /etc/os-release"),
+    ("CHK_OSRELEASE_DALI", "grep -q '^DALI_VERSION=' /etc/os-release"),
+    ("CHK_PROVENANCE", "test -f /etc/dali-release"),
+    ("CHK_PREEXEC", "pacman -Q bash-preexec"),
+    ("CHK_ATUIN", "grep -q 'atuin init bash' /home/*/.bashrc"),
+    ("CHK_SSHD_HARDENED", "grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/10-dali-hardening.conf"),
+    ("CHK_FIREWALL", "test -x /usr/local/bin/dali-firewall"),
+]
+
+
+def verify_installed_system(vm: "Vm", hostname: str, root_password: str) -> None:
+    """Log in over the serial console and assert DALI's artifacts are present."""
+    log("PHASE 2 — verifying the installed system")
+    vm.send("root")
+    vm.expect(r"[Pp]assword:", timeout=30)
+    vm.send(root_password)
+    vm.expect(rf"root@{re.escape(hostname)}", timeout=60)
+
+    for sentinel, test in INSTALLED_CHECKS:
+        vm.send(f"{test} && echo {sentinel}_OK")
+    vm.send("echo CHECKS_DONE")
+    out = vm.expect(r"CHECKS_DONE", timeout=60)
+
+    missing = [s for s, _ in INSTALLED_CHECKS if f"{s}_OK" not in out]
+    if missing:
+        raise RuntimeError(f"installed-system checks failed: {', '.join(missing)}")
+    log(f"PHASE 2 — all {len(INSTALLED_CHECKS)} installed-system checks passed")
 
 
 def main() -> int:
@@ -262,14 +300,18 @@ def main() -> int:
     # Phase 2 waits for "<hostname> login:"; derive it from the config so it
     # cannot drift out of sync (the config default hostname is 'arch'). Parsed
     # with a regex rather than a TOML lib (tomllib is Python 3.11+ only).
+    config_text = args.config.read_text()
     hostname = args.hostname or "arch"
     if not args.hostname:
-        match = re.search(r'^\s*hostname\s*=\s*"([^"]+)"', args.config.read_text(), re.MULTILINE)
+        match = re.search(r'^\s*hostname\s*=\s*"([^"]+)"', config_text, re.MULTILINE)
         if match:
             hostname = match.group(1)
+    # Root password (if any) lets phase 2 log in and verify the installed system.
+    root_match = re.search(r'^\s*root_password\s*=\s*"([^"]*)"', config_text, re.MULTILINE)
+    root_password = root_match.group(1) if root_match else ""
     prepared = prepare(args.work, args.iso, args.dali, args.config)
     phase_install(prepared, args.work)
-    phase_boot(prepared, hostname, args.work)
+    phase_boot(prepared, hostname, root_password, args.work)
     log("\033[1;32mE2E PASSED\033[0m — real install booted successfully")
     return 0
 
