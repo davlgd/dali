@@ -12,7 +12,7 @@ pub mod stack;
 mod secret;
 mod validate;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -104,15 +104,52 @@ impl Default for InstallConfig {
 
 impl InstallConfig {
     /// Load a configuration from a TOML file.
+    ///
+    /// If a sibling credentials file ([`credentials_path`]) exists, its
+    /// passwords are merged in (only non-empty values override, so a locked
+    /// root stays locked). A single file with inline secrets still works.
     pub fn from_toml_file(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-        Ok(toml::from_str(&raw)?)
+        let mut config: Self = toml::from_str(&raw)?;
+
+        let creds_path = credentials_path(path);
+        if creds_path.exists() {
+            let raw =
+                std::fs::read_to_string(&creds_path).map_err(|e| Error::io(&creds_path, e))?;
+            let creds: Credentials = toml::from_str(&raw)?;
+            if !creds.user_password.is_empty() {
+                config.user.password = creds.user_password;
+            }
+            if !creds.root_password.is_empty() {
+                config.root_password = creds.root_password;
+            }
+        }
+        Ok(config)
     }
 
     /// Serialize the configuration to pretty TOML, redacting nothing — callers
     /// that persist this must treat it as sensitive (it contains passwords).
     pub fn to_toml(&self) -> Result<String> {
         Ok(toml::to_string_pretty(self)?)
+    }
+
+    /// Serialize the configuration to TOML with the passwords blanked, so the
+    /// result is safe to share or commit.
+    pub fn to_toml_safe(&self) -> Result<String> {
+        let mut safe = self.clone();
+        safe.user.password = Secret::default();
+        safe.root_password = Secret::default();
+        Ok(toml::to_string_pretty(&safe)?)
+    }
+
+    /// Serialize just the secrets (passwords) to TOML, for the sidecar
+    /// credentials file.
+    pub fn to_credentials_toml(&self) -> Result<String> {
+        let creds = Credentials {
+            user_password: self.user.password.clone(),
+            root_password: self.root_password.clone(),
+        };
+        Ok(toml::to_string_pretty(&creds)?)
     }
 
     /// All packages installed by `pacstrap`: the base set, the curated app set
@@ -176,6 +213,25 @@ impl InstallConfig {
         }
         Ok(())
     }
+}
+
+/// The sidecar credentials file for a given config path: `foo.toml` →
+/// `foo.credentials.toml`.
+pub(crate) fn credentials_path(main: &Path) -> PathBuf {
+    let stem = main
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("config");
+    main.with_file_name(format!("{stem}.credentials.toml"))
+}
+
+/// The secret half of a saved configuration, kept out of the shareable file.
+#[derive(Default, Serialize, Deserialize)]
+struct Credentials {
+    #[serde(default)]
+    user_password: Secret,
+    #[serde(default)]
+    root_password: Secret,
 }
 
 #[cfg(test)]
@@ -254,5 +310,60 @@ mod tests {
         let toml = config_with("/dev/vda", "pw").to_toml().unwrap();
         assert!(toml.contains("[user]"), "expected a [user] table:\n{toml}");
         assert!(toml::from_str::<InstallConfig>(&toml).is_ok());
+    }
+
+    #[test]
+    fn credentials_path_appends_credentials_suffix() {
+        assert_eq!(
+            credentials_path(Path::new("/etc/foo.toml")),
+            Path::new("/etc/foo.credentials.toml")
+        );
+    }
+
+    #[test]
+    fn safe_toml_omits_secrets_and_credentials_toml_keeps_them() {
+        let config = config_with("/dev/vda", "hunter2");
+        let safe = config.to_toml_safe().unwrap();
+        assert!(
+            !safe.contains("hunter2"),
+            "safe config must not leak password"
+        );
+        let creds = config.to_credentials_toml().unwrap();
+        assert!(creds.contains("hunter2"));
+        assert!(creds.contains("user_password"));
+    }
+
+    #[test]
+    fn split_save_then_load_round_trips_the_password() {
+        let dir = std::env::temp_dir().join(format!("dali-creds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let main = dir.join("c.toml");
+        let config = config_with("/dev/vda", "hunter2");
+        std::fs::write(&main, config.to_toml_safe().unwrap()).unwrap();
+        std::fs::write(
+            credentials_path(&main),
+            config.to_credentials_toml().unwrap(),
+        )
+        .unwrap();
+
+        let loaded = InstallConfig::from_toml_file(&main).unwrap();
+        assert_eq!(loaded.user.password.expose(), "hunter2");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn single_file_with_inline_secrets_still_loads() {
+        let dir = std::env::temp_dir().join(format!("dali-inline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let main = dir.join("c.toml");
+        std::fs::write(
+            &main,
+            config_with("/dev/vda", "inlinepw").to_toml().unwrap(),
+        )
+        .unwrap();
+
+        let loaded = InstallConfig::from_toml_file(&main).unwrap();
+        assert_eq!(loaded.user.password.expose(), "inlinepw");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

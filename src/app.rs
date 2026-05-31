@@ -221,21 +221,30 @@ fn require_exists(path: &str, message: &str) -> Result<()> {
 
 /// Persist a configuration to disk (used by `--save-config`).
 ///
-/// The file contains plaintext passwords, so it is created with `0600`
-/// permissions rather than relying on the umask.
+/// Splits into two files: the shareable config (no passwords) at `path`, and a
+/// sidecar `*.credentials.toml` holding the plaintext passwords at `0600`. The
+/// credentials file is written *after* the safe one, so a partial failure never
+/// leaves secrets in the world-readable file.
 fn save_config(config: &InstallConfig, path: &Path) -> Result<()> {
-    let toml = config.to_toml()?;
+    std::fs::write(path, config.to_toml_safe()?).map_err(|e| Error::io(path, e))?;
+
+    let creds_path = crate::config::credentials_path(path);
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .mode(0o600)
-        .open(path)
-        .map_err(|e| Error::io(path, e))?;
-    file.write_all(toml.as_bytes())
-        .map_err(|e| Error::io(path, e))?;
-    println!("Configuration written to {} (mode 0600)", path.display());
-    println!("warning: this file contains plaintext passwords — keep it safe.");
+        .open(&creds_path)
+        .map_err(|e| Error::io(&creds_path, e))?;
+    file.write_all(config.to_credentials_toml()?.as_bytes())
+        .map_err(|e| Error::io(&creds_path, e))?;
+
+    println!("Configuration written to {} (no secrets)", path.display());
+    println!(
+        "Credentials written to {} (mode 0600)",
+        creds_path.display()
+    );
+    println!("warning: the credentials file contains plaintext passwords — keep it safe.");
     Ok(())
 }
 

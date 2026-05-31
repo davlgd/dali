@@ -9,6 +9,9 @@ use clap::Parser;
 #[command(name = "dali", version, about, long_about = None)]
 pub struct Cli {
     /// Install non-interactively from a TOML configuration file.
+    ///
+    /// If a sibling `<name>.credentials.toml` sits next to it, its passwords
+    /// are merged in (so the main file can be kept secret-free).
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 
@@ -24,7 +27,8 @@ pub struct Cli {
     pub yes: bool,
 
     /// Write the effective configuration (from `--config`, or from the wizard
-    /// if none) to a file and exit without installing.
+    /// if none) to a file and exit without installing. Passwords go into a
+    /// sibling `<name>.credentials.toml` (mode 0600), not the main file.
     ///
     /// Cannot be combined with `--dry-run` or `--yes`.
     #[arg(long, value_name = "FILE", conflicts_with_all = ["dry_run", "yes"])]

@@ -152,8 +152,13 @@ password = "changeme"
 ```
 
 An empty `root_password` **locks the root account**; administration then
-happens exclusively through the sudo-enabled user. The config contains
-plaintext passwords — treat any saved file as a secret.
+happens exclusively through the sudo-enabled user.
+
+A config file may contain plaintext passwords — treat it as a secret.
+`--save-config foo.toml` keeps them out of the shareable file: it writes
+`foo.toml` **without** passwords and a sibling `foo.credentials.toml` (mode
+`0600`) holding only the secrets. Passing `--config foo.toml` later merges the
+sidecar back in automatically; a single file with inline passwords also works.
 
 The interactive TUI gathers every one of these fields, including the zram
 toggle and extra packages, and re-asks each password for confirmation. Locale,
