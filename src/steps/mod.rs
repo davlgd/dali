@@ -122,13 +122,23 @@ fn run_pipeline(
     let total = steps.len();
     for (i, step) in steps.iter().enumerate() {
         reporter.step_start(i + 1, total, step.name());
-        let mut ctx = Context {
-            config,
-            sys,
-            reporter,
+        let result = {
+            let mut ctx = Context {
+                config,
+                sys,
+                reporter,
+            };
+            step.run(&mut ctx)
         };
-        step.run(&mut ctx)?;
-        reporter.step_done(step.name());
+        match result {
+            Ok(()) => reporter.step_done(step.name()),
+            Err(e) => {
+                // Record the reason in the transcript before unwinding, so the
+                // persisted install log explains why a partial install stopped.
+                reporter.info(&format!("step failed: {e}"));
+                return Err(e);
+            }
+        }
     }
     Ok(())
 }
@@ -300,6 +310,31 @@ mod tests {
         assert!(toml.contains("total = 2"));
         assert!(toml.contains("completed = true"));
         assert!(toml.contains("completed = false"));
+    }
+
+    #[test]
+    fn pipeline_records_the_failure_reason_in_the_transcript() {
+        use crate::report::TranscriptReporter;
+
+        struct Boom;
+        impl Step for Boom {
+            fn name(&self) -> &'static str {
+                "Boom"
+            }
+            fn run(&self, _: &mut Context<'_>) -> Result<()> {
+                Err(crate::error::Error::Config("kaboom".into()))
+            }
+        }
+
+        let steps: Vec<Box<dyn Step>> = vec![Box::new(Boom)];
+        let sys = DrySys::new();
+        let mut inner = NullReporter;
+        let mut transcript = TranscriptReporter::new(&mut inner);
+        let result = run_pipeline(&steps, &sample_config(), &sys, &mut transcript);
+
+        assert!(result.is_err());
+        assert!(transcript.transcript().contains("step failed"));
+        assert!(transcript.transcript().contains("kaboom"));
     }
 
     #[test]
