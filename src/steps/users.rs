@@ -61,3 +61,47 @@ fn set_password(ctx: &mut Context<'_>, account: &str, password: &str) -> Result<
             .stdin(format!("{account}:{password}\n")),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Secret;
+    use crate::steps::test_support::{config, dry_actions};
+
+    fn useradd_line(actions: &[String]) -> String {
+        actions
+            .iter()
+            .find(|a| a.contains("useradd"))
+            .expect("a useradd command is issued")
+            .clone()
+    }
+
+    #[test]
+    fn docker_group_is_added_only_with_the_default_app_set() {
+        let mut cfg = config();
+
+        cfg.default_apps = true;
+        assert!(useradd_line(&dry_actions(&Users, &cfg)).contains("--groups wheel,docker"));
+
+        cfg.default_apps = false;
+        let line = useradd_line(&dry_actions(&Users, &cfg));
+        assert!(line.contains("--groups wheel "), "wheel only: {line}");
+        assert!(!line.contains("docker"), "no docker group: {line}");
+    }
+
+    #[test]
+    fn empty_root_password_locks_root_instead_of_setting_one() {
+        let mut cfg = config();
+
+        cfg.root_password = Secret::new("");
+        let actions = dry_actions(&Users, &cfg);
+        assert!(actions.iter().any(|a| a.contains("passwd --lock root")));
+
+        cfg.root_password = Secret::new("rootpw");
+        let actions = dry_actions(&Users, &cfg);
+        assert!(
+            !actions.iter().any(|a| a.contains("passwd --lock")),
+            "root with a password must not be locked"
+        );
+    }
+}

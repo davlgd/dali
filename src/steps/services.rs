@@ -41,3 +41,47 @@ impl Step for Services {
 
 /// zram-generator config: a zstd-compressed swap device sized to RAM, capped at 8 GiB.
 const ZRAM_CONF: &str = "[zram0]\nzram-size = min(ram, 8192)\ncompression-algorithm = zstd\n";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn app_services_are_enabled_only_with_the_default_app_set() {
+        let mut cfg = config();
+
+        cfg.default_apps = true;
+        let actions = dry_actions(&Services, &cfg);
+        // Base services always; app services (docker/avahi/sshd) only here.
+        assert!(actions.iter().any(|a| a.contains("enable NetworkManager")));
+        assert!(actions.iter().any(|a| a.contains("enable docker.service")));
+
+        cfg.default_apps = false;
+        let actions = dry_actions(&Services, &cfg);
+        assert!(actions.iter().any(|a| a.contains("enable NetworkManager")));
+        assert!(
+            !actions.iter().any(|a| a.contains("docker.service")),
+            "app services must be skipped without the app set"
+        );
+    }
+
+    #[test]
+    fn zram_config_is_written_only_when_enabled() {
+        let mut cfg = config();
+
+        cfg.zram_swap = true;
+        let actions = dry_actions(&Services, &cfg);
+        assert!(actions.iter().any(|a| a.contains("zram-generator.conf")));
+
+        cfg.zram_swap = false;
+        let actions = dry_actions(&Services, &cfg);
+        assert!(!actions.iter().any(|a| a.contains("zram-generator.conf")));
+    }
+
+    #[test]
+    fn zram_config_caps_size_and_uses_zstd() {
+        assert!(ZRAM_CONF.contains("zram-size = min(ram, 8192)"));
+        assert!(ZRAM_CONF.contains("compression-algorithm = zstd"));
+    }
+}

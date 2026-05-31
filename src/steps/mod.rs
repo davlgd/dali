@@ -100,18 +100,53 @@ pub fn install(config: &InstallConfig, sys: &dyn Sys, reporter: &mut dyn Reporte
     Ok(())
 }
 
+/// Shared test helpers for exercising individual steps against a dry-run `Sys`.
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_support {
     use super::*;
     use crate::config::{Secret, UserAccount};
     use crate::system::DrySys;
 
-    struct NullReporter;
+    /// A reporter that swallows progress output.
+    pub(crate) struct NullReporter;
     impl Reporter for NullReporter {
         fn step_start(&mut self, _: usize, _: usize, _: &str) {}
         fn info(&mut self, _: &str) {}
         fn step_done(&mut self, _: &str) {}
     }
+
+    /// A minimal config with a named user, for driving a single step.
+    pub(crate) fn config() -> InstallConfig {
+        InstallConfig {
+            disk: "/dev/vda".to_owned(),
+            user: UserAccount {
+                username: "alice".to_owned(),
+                password: Secret::new("pw"),
+            },
+            ..InstallConfig::default()
+        }
+    }
+
+    /// Run `step` against a dry-run `Sys` and return the actions it recorded.
+    pub(crate) fn dry_actions(step: &dyn Step, config: &InstallConfig) -> Vec<String> {
+        let sys = DrySys::new();
+        let mut reporter = NullReporter;
+        let mut ctx = Context {
+            config,
+            sys: &sys,
+            reporter: &mut reporter,
+        };
+        step.run(&mut ctx).unwrap();
+        sys.actions()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::NullReporter;
+    use super::*;
+    use crate::config::{Secret, UserAccount};
+    use crate::system::DrySys;
 
     fn sample_config() -> InstallConfig {
         InstallConfig {

@@ -70,3 +70,38 @@ impl Step for ImportSshKeys {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn nothing_runs_when_no_github_user_is_set() {
+        let cfg = config(); // github_user empty by default
+        assert!(
+            dry_actions(&ImportSshKeys, &cfg).is_empty(),
+            "step must not touch the system without a GitHub user"
+        );
+    }
+
+    #[test]
+    fn fetches_keys_and_locks_down_permissions_when_set() {
+        let mut cfg = config();
+        cfg.github_user = "octocat".to_owned();
+        let actions = dry_actions(&ImportSshKeys, &cfg);
+
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("curl") && a.contains("https://github.com/octocat.keys"))
+        );
+        assert!(actions.iter().any(|a| a.contains("authorized_keys")));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("chmod 600") && a.contains("authorized_keys")),
+            "authorized_keys must be mode 600"
+        );
+    }
+}
