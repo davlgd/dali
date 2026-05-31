@@ -10,8 +10,7 @@ from the live ISO, answer a handful of questions, reboot into a working system.
 
 ## The opinionated stack
 
-DALI installs exactly one well-trodden configuration, so there is nothing to
-get wrong:
+DALI installs exactly one well-trodden configuration:
 
 | Area        | Choice                                                        |
 |-------------|---------------------------------------------------------------|
@@ -24,86 +23,18 @@ get wrong:
 | Swap        | zram (zstd, sized to RAM, capped at 8 GiB) — optional         |
 | Admin       | a sudo-enabled user in the `wheel` group; root locked by default |
 
-The only things you choose are: the **disk**, **hostname**, **username +
+The only things you choose are the **disk**, **hostname**, **username +
 password**, optional **root password**, **locale**, **keymap**, **timezone**,
-the zram toggle and any **extra packages**. Everything else is fixed by DALI's
-opinionated stack.
+the zram toggle and any **extra packages**. Everything else is fixed by the
+stack above — see [What every install sets up](#what-every-install-sets-up).
 
-More precisely, every install gets:
+## Requirements
 
-- **Base packages**: `base`, `base-devel`, `btrfs-progs`, `curl`, `git`,
-  `linux`, `linux-firmware`, `networkmanager`, `snap-pac`, `snapper`, `sudo`,
-  `vim` — plus the matching CPU microcode (`intel-ucode`/`amd-ucode`),
-  `zram-generator` when zram is on, and any extras you list.
-- **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
-  `bash-completion`, `bash-preexec`, `bat`, `docker`, `docker-buildx`,
-  `fastfetch`, `ffmpeg`, `glab`, `htop`, `impala`, `jless`, `jq`, `lazydocker`,
-  `lazygit`, `less`, `minio-client`, `nano`, `openssh`, `uv`, `whois`, `yt-dlp`,
-  `zellij` — with `docker.service`,
-  `avahi-daemon.service` and `sshd.service` enabled and the user added to the
-  `docker` group.
-- **SSH keys** (optional, `github_user`): when set, that GitHub account's public
-  keys (`https://github.com/<user>.keys`) are imported as the user's accepted
-  SSH keys (`~/.ssh/authorized_keys`).
-- **Snapshots**: `snapper` is configured for the root subvolume only (on the
-  `@snapshots` subvol), and `snap-pac` takes automatic pre/post snapshots around
-  every `pacman` transaction — so a bad upgrade can be rolled back. `/home` is
-  deliberately not snapshotted.
-- **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
-  `mise` and `atuin` activation (the latter via `bash-preexec`), helper functions
-  (`check`, `clean_cargo`, `f`, `mkcd`, `up`,
-  `w` — `up` updates the system, mise tools, global bun packages, uv tools and
-  the V compiler in one go)
-  and aliases (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
-  `dps`, `myip`, `pgen`). The block is marker-delimited, so re-running replaces
-  it in place (with a one-time `~/.bashrc.dali.bak` backup) instead of appending
-  a duplicate.
-- **Provisioning** (`provision`, on by default, best-effort): builds the
-  [V compiler](https://vlang.io) from source into `~/.local/bin`, runs the
-  [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
-  installers as your user, and installs `bun`, `codex`, `gemini`, `node`,
-  `opencode` and `pi` globally via `mise`. Network-bound; failures are reported
-  as warnings and never abort the (already bootable) install. Any
-  `custom_commands` you list run as your user inside the target at the end of
-  this step.
-- **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists` are
-  enabled — on the live system before `pacstrap` (faster install) and in the
-  target so it persists.
-- **Mirrors**: `reflector` ranks the mirrorlist by speed, filtered to the
-  timezone's country (worldwide fallback), before `pacstrap` — so both the
-  install and the installed system pull from fast mirrors. Best-effort.
-- **GnuPG keyservers**: `/etc/gnupg/dirmngr.conf` is set with several keyservers
-  and a short connect timeout, so `pacman-key` doesn't hang on a dead server.
-- **Network carry-over**: the live ISO's NetworkManager/iwd profiles are copied
-  into the target (mode `0600`), so a system installed over Wi-Fi reconnects
-  after reboot without re-entering credentials. Best-effort.
-- **Wireless regdom**: the regulatory domain is derived from the timezone's
-  country (e.g. `Europe/Paris` → `FR`) and written to
-  `/etc/conf.d/wireless-regdom`, so Wi-Fi uses the right channels/power.
-- **System tuning** (always applied): `fs.inotify.max_user_watches = 524288`
-  (a dev box exhausts the default almost immediately) and a systemd
-  `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and
-  `net.ipv4.tcp_mtu_probing = 1` (robust SSH/transfers behind broken PMTUD).
-- **Login banner**: a NetworkManager dispatcher keeps `/etc/issue` showing the
-  machine's LAN IPv4 (the egress address, never the `docker0` bridge) at the
-  console login prompt — so you can see where to SSH in.
-- **Install log**: the full install transcript is written to
-  `/var/log/dali-install.log` in the target, and a per-step completion map to
-  `/var/log/dali-steps.toml`, for post-install (or partial-install) diagnosis.
-- **Provenance**: `/etc/dali-release` records that DALI provisioned the system
-  (and which version), and `/etc/os-release` gains additive `DALI_*` fields
-  while keeping `ID=arch` / `PRETTY_NAME="Arch Linux"` — it stays Arch.
-- **ESP**: FAT32, 1 GiB, mounted at `/boot`.
-- **Base services**: `NetworkManager`, `systemd-timesyncd`,
-  `systemd-boot-update`, `fstrim.timer`.
-- **Omitted-field defaults**: `hostname=arch`, `timezone=UTC`,
-  `locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, `default_apps=true`,
-  `provision=true`, and root **locked** (empty `root_password`).
-
-Set `default_apps = false` for a bare bootable system, or `provision = false`
-to skip the V/`mise`/Claude Code step. When a real install finishes, DALI
-**reboots into the new system by default** (immediately with `--yes`, after a
-confirmation otherwise); pass `--no-reboot` to stay on the live environment.
+DALI runs from an Arch-based live environment **booted in UEFI mode**, as
+**root** — the [Arch Linux live ISO](https://archlinux.org/download/) or
+[SystemRescue](https://www.system-rescue.org/Download/). A real install refuses
+to proceed otherwise. (On any other Linux box you can still rehearse the whole
+plan with `--dry-run`, which changes nothing — see [Usage](#usage).)
 
 ## Install
 
@@ -118,29 +49,23 @@ chmod +x dali-linux-x86_64-musl
 Verify it against the published `SHA256SUMS` if you like. A glibc build
 (`dali-linux-x86_64-gnu`) is also attached for environments that prefer it.
 
-## Requirements
-
-DALI runs from an Arch-based live environment **booted in UEFI mode**, as
-**root** — the [Arch Linux live ISO](https://archlinux.org/download/) or
-[SystemRescue](https://www.system-rescue.org/Download/). A real install refuses
-to proceed otherwise. The interactive TUI needs a genuine
-terminal; on any other Linux box you can still rehearse the whole plan with
-`cargo run -- --dry-run --config examples/minimal.toml`, which changes nothing.
-
 ## Usage
 
-From the live ISO:
-
 ```sh
-# Interactive (a single-screen TUI with sensible defaults pre-filled):
+# Interactive: a single-screen TUI with sensible defaults pre-filled.
 ./dali
 
-# See exactly what would happen, changing nothing:
+# See exactly what would happen, changing nothing.
 ./dali --dry-run --config myconfig.toml
 
-# Fully automated, no prompts (for scripted / repeatable installs):
+# Fully automated, no prompts (scripted / repeatable installs).
 ./dali --config myconfig.toml --yes
 ```
+
+When a real install finishes, DALI **reboots into the new system by default**
+(immediately with `--yes`, after a confirmation otherwise); pass `--no-reboot`
+to stay on the live environment. Set `default_apps = false` for a bare bootable
+system, or `provision = false` to skip the post-install tooling step.
 
 ### Flags
 
@@ -184,99 +109,124 @@ username = "david"
 password = "changeme"
 ```
 
-An empty `root_password` **locks the root account**; administration then
-happens exclusively through the sudo-enabled user.
+- An empty `root_password` **locks the root account**; administration then
+  happens exclusively through the sudo-enabled user.
+- A config file may contain plaintext passwords — treat it as a secret.
+  `--save-config foo.toml` keeps them out of the shareable file: it writes
+  `foo.toml` **without** passwords and a sibling `foo.credentials.toml` (mode
+  `0600`) holding only the secrets. `--config foo.toml` later merges the sidecar
+  back in automatically; a single file with inline passwords also works.
 
-A config file may contain plaintext passwords — treat it as a secret.
-`--save-config foo.toml` keeps them out of the shareable file: it writes
-`foo.toml` **without** passwords and a sibling `foo.credentials.toml` (mode
-`0600`) holding only the secrets. Passing `--config foo.toml` later merges the
-sidecar back in automatically; a single file with inline passwords also works.
+The interactive TUI gathers every one of these fields and re-asks each password
+for confirmation. Locale, keymap and timezone are **picked from a filterable
+list** of what the system actually supports (press Enter on the field, type to
+filter, arrow-select) — no need to remember exact identifiers.
 
-The interactive TUI gathers every one of these fields, including the zram
-toggle and extra packages, and re-asks each password for confirmation. Locale,
-keymap and timezone are **picked from a filterable list** of what the system
-actually supports (press Enter on the field, type to filter, arrow-select) — no
-need to remember exact identifiers.
+## What every install sets up
+
+### Disk, boot & packages
+
+- **ESP**: FAT32, 1 GiB, mounted at `/boot`.
+- **Base packages**: `base`, `base-devel`, `btrfs-progs`, `curl`, `git`,
+  `linux`, `linux-firmware`, `networkmanager`, `snap-pac`, `snapper`, `sudo`,
+  `vim` — plus the matching CPU microcode (`intel-ucode`/`amd-ucode`),
+  `zram-generator` when zram is on, and any extras you list.
+- **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
+  `bash-completion`, `bash-preexec`, `bat`, `docker`, `docker-buildx`,
+  `fastfetch`, `ffmpeg`, `glab`, `htop`, `impala`, `jless`, `jq`, `lazydocker`,
+  `lazygit`, `less`, `minio-client`, `nano`, `openssh`, `uv`, `whois`, `yt-dlp`,
+  `zellij` — with `docker.service`, `avahi-daemon.service` and `sshd.service`
+  enabled and the user added to the `docker` group.
+- **Base services**: `NetworkManager`, `systemd-timesyncd`,
+  `systemd-boot-update`, `fstrim.timer`.
+
+### Snapshots & recovery
+
+- **`snapper`** is configured for the root subvolume only (on the `@snapshots`
+  subvol), and **`snap-pac`** takes automatic pre/post snapshots around every
+  `pacman` transaction — so a bad upgrade can be rolled back. `/home` is
+  deliberately not snapshotted.
+
+### Shell & developer tooling
+
+- **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
+  `mise` and `atuin` activation (the latter via `bash-preexec`), helper
+  functions (`check`, `clean_cargo`, `f`, `mkcd`, `up`, `w`) and aliases
+  (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…, `dps`,
+  `myip`, `pgen`). `up` updates the system, mise tools, global bun/uv packages
+  and the V compiler in one go. The block is marker-delimited, so re-running
+  replaces it in place (with a one-time `~/.bashrc.dali.bak` backup).
+- **Provisioning** (`provision`, on by default, best-effort): builds the
+  [V compiler](https://vlang.io) into `~/.local/bin`, runs the
+  [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
+  installers, and installs `bun`, `codex`, `gemini`, `node`, `opencode` and `pi`
+  globally via `mise`. Any `custom_commands` you list run as your user at the end
+  of this step. Network-bound; failures are warnings, never aborting the
+  (already bootable) install.
+- **SSH keys** (optional, `github_user`): that GitHub account's public keys
+  (`https://github.com/<user>.keys`) are imported into `~/.ssh/authorized_keys`.
+
+### Networking & mirrors
+
+- **Mirrors**: `reflector` ranks the mirrorlist by speed, filtered to the
+  timezone's country (worldwide fallback), before `pacstrap` — so both the
+  install and the installed system pull from fast mirrors.
+- **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists`,
+  applied to the live system (faster install) and the target.
+- **Network carry-over**: the live ISO's NetworkManager/iwd profiles are copied
+  into the target (mode `0600`), so a Wi-Fi install reconnects after reboot
+  without re-entering credentials.
+- **Wireless regdom**: the regulatory domain is derived from the timezone's
+  country (e.g. `Europe/Paris` → `FR`), so Wi-Fi uses the right channels/power.
+- **GnuPG keyservers**: `/etc/gnupg/dirmngr.conf` gets several keyservers and a
+  short timeout, so `pacman-key` doesn't hang on a dead server.
+
+### System tuning, identity & diagnostics
+
+- **System tuning**: `fs.inotify.max_user_watches = 524288`, a systemd
+  `DefaultLimitNOFILE = 65536:524288` bump, and `net.ipv4.tcp_mtu_probing = 1`.
+- **Login banner**: a NetworkManager dispatcher keeps `/etc/issue` showing the
+  machine's LAN IPv4 at the console login prompt — so you can see where to SSH
+  in (the egress address, never the `docker0` bridge).
+- **Provenance**: `/etc/dali-release` records that DALI provisioned the system
+  (and which version), and `/etc/os-release` gains additive `DALI_*` fields
+  while keeping `ID=arch` / `PRETTY_NAME="Arch Linux"` — it stays Arch.
+- **Install log**: the full transcript is written to `/var/log/dali-install.log`
+  and a per-step completion map to `/var/log/dali-steps.toml`, for diagnosis.
+
+### Defaults
+
+Omitted config fields default to `hostname=arch`, `timezone=UTC`,
+`locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, `default_apps=true`,
+`provision=true`, and a **locked** root (empty `root_password`).
 
 ## Building
 
-DALI targets the **Rust 2024 edition** (minimum supported Rust version:
-**1.85**).
+DALI targets the **Rust 2024 edition** (minimum supported Rust: **1.85**).
 
 ```sh
-cargo build --release        # produces target/release/dali
+cargo build --release                                    # dynamic glibc build
+rustup target add x86_64-unknown-linux-musl              # for a portable, fully
+cargo build --release --target x86_64-unknown-linux-musl # static binary
 ```
 
-The default build is **dynamically linked against glibc** — fine on the Arch
-live ISO, which ships the same glibc. For a portable, fully static binary
-(recommended for shipping to arbitrary environments):
+"Fully static" refers only to `dali`'s own linkage: at runtime it still drives
+the Arch live ISO toolchain (`sgdisk`, `mkfs.btrfs`, `pacstrap`, `bootctl`,
+`genfstab`, …) as subprocesses, so it is meant to run from that environment.
+
+## Contributing & testing
+
+The quality gate, architecture, and how to add an install step are in
+[`CONTRIBUTING.md`](CONTRIBUTING.md). DALI is tested at three levels — unit, a
+process-level dry-run integration test, and a real bootable QEMU/KVM install —
+documented in [`docs/TESTING.md`](docs/TESTING.md).
+
+The quickest check, on any Linux box (no Arch, root or hardware needed, changes
+nothing):
 
 ```sh
-rustup target add x86_64-unknown-linux-musl
-cargo build --release --target x86_64-unknown-linux-musl
-```
-
-"Fully static" refers only to the `dali` executable's own linkage: at runtime
-DALI still drives the Arch live ISO toolchain (`sgdisk`, `mkfs.btrfs`,
-`pacstrap`, `bootctl`, `genfstab`, `blkid`, …) as subprocesses, so it is meant
-to run from that environment regardless of how it was linked.
-
-## Development
-
-```sh
-cargo test                                  # unit + integration tests
-cargo clippy --all-targets -- -D warnings   # zero-warning policy (pedantic)
-cargo fmt --check                           # formatting
-./scripts/ci.sh                             # all of the above in a clean Arch container
-
-# Rehearse the whole install plan on any Linux box — no Arch, root or hardware
-# needed, changes nothing:
 cargo run -- --dry-run --config examples/minimal.toml
 ```
-
-DALI is tested at three levels — unit, a process-level dry-run integration
-test, and a real bootable QEMU/KVM install. See
-[`docs/TESTING.md`](docs/TESTING.md).
-
-### Architecture
-
-The crate is split into small, single-responsibility modules:
-
-- `config` — the opinionated install spec (host-specific bits like CPU
-  microcode are probed at install time, not stored here).
-- `system` — the **effects boundary** (`Sys` trait): run a command, write a
-  file, or merely record a dry-run plan. This one seam is what makes DALI both
-  safe to rehearse and easy to test. Read-only inspection lives in
-  `system::probe`.
-- `steps` — the ordered install pipeline; each step does exactly one thing and
-  depends only on a `Context`.
-- `tui` — the interactive wizard that produces a `config`.
-- `cli` — the clap command-line argument definitions.
-- `report` — user-facing progress output.
-- `error` — the shared `Error`/`Result` type used across the crate.
-- `app` — wires the above together for the binary.
-
-Adding or reordering a step is a one-line change to `steps::pipeline()`.
-
-### End-to-end testing
-
-`scripts/e2e.py` performs a **real, bootable installation** inside a QEMU/KVM
-virtual machine: it boots the Arch ISO, runs DALI headless against a virtual
-disk, then reboots from that disk and asserts the installed system comes up to
-a login prompt.
-
-```sh
-cargo build --release
-python3 scripts/e2e.py \
-  --iso archlinux-x86_64.iso \
-  --dali target/release/dali \
-  --config examples/full.toml
-```
-
-Requires `qemu`, `edk2-ovmf`, `bsdtar`, `e2fsprogs` and access to `/dev/kvm`.
-See [`docs/TESTING.md`](docs/TESTING.md) for the full prerequisites, how the
-harness works, and how to get the ISO.
 
 ## License
 

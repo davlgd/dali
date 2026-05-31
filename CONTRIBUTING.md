@@ -22,7 +22,8 @@ otherwise).
 ## Architecture in one minute
 
 ```
-config   →  what to install (the single source of truth)
+config   →  the opinionated install spec (host bits like CPU microcode are
+            probed at install time, not stored here)
 system   →  the Sys effects boundary: run a command / write a file, OR record
             a dry-run plan. Read-only inspection lives in system::probe.
 steps    →  the ordered install pipeline; each step does ONE thing.
