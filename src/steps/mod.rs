@@ -18,6 +18,7 @@ mod shell;
 mod snapshots;
 mod ssh_keys;
 mod storage;
+mod tuning;
 mod users;
 
 use crate::config::InstallConfig;
@@ -75,6 +76,7 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
         Box::new(ssh_keys::ImportSshKeys),
         Box::new(services::Services),
         Box::new(snapshots::Snapshots),
+        Box::new(tuning::Tuning),
         Box::new(provision::Provision),
     ]
 }
@@ -180,6 +182,7 @@ mod tests {
                 "Import GitHub SSH keys",
                 "Enable services",
                 "Configure snapshots (snapper)",
+                "Apply system tuning",
                 "Provision extras (AUR, mise, Claude Code)",
             ]
         );

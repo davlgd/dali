@@ -64,6 +64,8 @@ More precisely, every install gets:
   (already bootable) install. (`pamac-aur` is intentionally not in the defaults
   — it currently needs an older `libalpm` than Arch ships; add it to
   `aur_packages` once it is compatible again.)
+- **System tuning** (always applied): `fs.inotify.max_user_watches = 524288`
+  (a dev box exhausts the default almost immediately).
 - **ESP**: FAT32, 1 GiB, mounted at `/boot`.
 - **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.
