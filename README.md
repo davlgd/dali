@@ -53,7 +53,9 @@ More precisely, every install gets:
   `w` — `up` updates the system + AUR, mise tools, global bun packages, uv
   tools and the V compiler in one go)
   and aliases (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
-  `dps`, `myip`, `pgen`).
+  `dps`, `myip`, `pgen`). The block is marker-delimited, so re-running replaces
+  it in place (with a one-time `~/.bashrc.dali.bak` backup) instead of appending
+  a duplicate.
 - **Provisioning** (`provision`, on by default, best-effort): bootstraps the
   [`paru`](https://github.com/Morganamilo/paru) AUR helper, installs any
   `aur_packages` you list through it, builds the [V compiler](https://vlang.io)

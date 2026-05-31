@@ -28,12 +28,22 @@ impl Step for ShellSetup {
             .write(&target_path("/etc/profile.d/10-dali-path.sh"), PROFILE_PATH)?;
 
         ctx.info(format!(
-            "appending aliases and helpers to /home/{user}/.bashrc"
+            "writing aliases and helpers to /home/{user}/.bashrc"
         ));
-        ctx.sys
-            .append(&target_path(&format!("/home/{user}/.bashrc")), BASHRC_BLOCK)
+        // Marker-delimited so re-running replaces the block instead of appending
+        // a duplicate.
+        ctx.sys.write_block(
+            &target_path(&format!("/home/{user}/.bashrc")),
+            BASHRC_BEGIN,
+            BASHRC_END,
+            BASHRC_BLOCK,
+        )
     }
 }
+
+/// Markers delimiting the DALI block in `~/.bashrc` (must match [`BASHRC_BLOCK`]).
+const BASHRC_BEGIN: &str = "# >>> DALI shell setup >>>";
+const BASHRC_END: &str = "# <<< DALI shell setup <<<";
 
 /// System-wide PATH addition for login shells; idempotent (no duplicate entry).
 const PROFILE_PATH: &str = r#"# Added by DALI: per-user local binaries on PATH
@@ -101,3 +111,30 @@ alias remove='sudo pacman -Rns'
 alias search='pacman -Ss'
 # <<< DALI shell setup <<<
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn markers_match_the_block() {
+        assert!(BASHRC_BLOCK.contains(BASHRC_BEGIN));
+        assert!(BASHRC_BLOCK.contains(BASHRC_END));
+    }
+
+    #[test]
+    fn writes_profile_path_and_bashrc_block() {
+        let actions = dry_actions(&ShellSetup, &config());
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("write: /mnt/etc/profile.d/10-dali-path.sh"))
+        );
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("write_block: /mnt/home/alice/.bashrc"))
+        );
+    }
+}

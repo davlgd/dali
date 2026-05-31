@@ -98,9 +98,49 @@ impl Sys for RealSys {
             .map_err(|e| Error::io(path, e))
     }
 
+    fn write_block(&self, path: &str, begin: &str, end: &str, block: &str) -> Result<()> {
+        let existing = std::fs::read_to_string(path).unwrap_or_default();
+
+        // Keep a one-time backup before the first modification.
+        let backup = format!("{path}.dali.bak");
+        if !existing.is_empty() && !Path::new(&backup).exists() {
+            std::fs::write(&backup, &existing).map_err(|e| Error::io(&backup, e))?;
+        }
+
+        self.write(path, &splice_block(&existing, begin, end, block))
+    }
+
     fn is_real(&self) -> bool {
         true
     }
+}
+
+/// Replace the `begin`..`end` region of `existing` with `block`, or append
+/// `block` when no such region exists. `block` carries its own markers and
+/// leading newline, so a fresh append matches a plain append.
+fn splice_block(existing: &str, begin: &str, end: &str, block: &str) -> String {
+    if let Some(b) = existing.find(begin)
+        && let Some(rel) = existing[b..].find(end)
+    {
+        let marker_end = b + rel + end.len();
+        // Extend to the end of the end-marker's line (consume its newline).
+        let line_end = existing[marker_end..]
+            .find('\n')
+            .map_or(existing.len(), |n| marker_end + n + 1);
+        let before = existing[..b].trim_end_matches('\n');
+        let after = &existing[line_end..];
+
+        let mut out = String::from(before);
+        out.push_str(block); // block begins with its own newline + marker
+        if !after.is_empty() {
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(after);
+        }
+        return out;
+    }
+    format!("{existing}{block}")
 }
 
 #[cfg(test)]
@@ -128,5 +168,33 @@ mod tests {
     #[test]
     fn run_errors_on_nonzero_exit() {
         assert!(RealSys.run(&Command::new("false")).is_err());
+    }
+
+    #[test]
+    fn write_block_is_idempotent_and_preserves_user_content() {
+        let dir = std::env::temp_dir().join(format!("dali-wb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bashrc").to_string_lossy().into_owned();
+        std::fs::write(&path, "export X=1\n").unwrap();
+        let (begin, end) = ("# >>> B >>>", "# <<< B <<<");
+
+        RealSys
+            .write_block(&path, begin, end, "\n# >>> B >>>\nalias a=1\n# <<< B <<<\n")
+            .unwrap();
+        let after1 = std::fs::read_to_string(&path).unwrap();
+        assert!(after1.contains("export X=1"));
+        assert_eq!(after1.matches(begin).count(), 1);
+
+        // Re-run with a changed block: still exactly one marker, user line kept.
+        RealSys
+            .write_block(&path, begin, end, "\n# >>> B >>>\nalias a=2\n# <<< B <<<\n")
+            .unwrap();
+        let after2 = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after2.matches(begin).count(), 1, "block not duplicated");
+        assert!(after2.contains("alias a=2") && !after2.contains("alias a=1"));
+        assert!(after2.contains("export X=1"));
+        assert!(Path::new(&format!("{path}.dali.bak")).exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

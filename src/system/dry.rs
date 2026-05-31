@@ -62,6 +62,11 @@ impl Sys for DrySys {
         Ok(())
     }
 
+    fn write_block(&self, path: &str, _begin: &str, _end: &str, block: &str) -> Result<()> {
+        self.record_content("write_block", path, block);
+        Ok(())
+    }
+
     fn is_real(&self) -> bool {
         false
     }

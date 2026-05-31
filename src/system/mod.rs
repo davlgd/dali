@@ -137,6 +137,12 @@ pub trait Sys {
     /// without disturbing existing content (used for `~/.bashrc`).
     fn append(&self, path: &str, contents: &str) -> Result<()>;
 
+    /// Idempotently write a marker-delimited `block` into `path`: replace the
+    /// existing `begin`..`end` region if present, otherwise append. A one-time
+    /// `<path>.dali.bak` backup is kept. `block` is expected to contain the
+    /// `begin`/`end` markers itself. Re-running never duplicates the block.
+    fn write_block(&self, path: &str, begin: &str, end: &str, block: &str) -> Result<()>;
+
     /// Whether this implementation actually performs effects. `false` for
     /// dry-runs, used to skip steps that only make sense for real installs.
     fn is_real(&self) -> bool;
