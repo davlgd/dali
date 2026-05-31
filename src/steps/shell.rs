@@ -6,7 +6,7 @@
 
 use super::{Context, Step};
 use crate::error::Result;
-use crate::system::target_path;
+use crate::system::{Command, target_path};
 
 /// Writes the DALI shell setup into the user's bash configuration.
 pub struct ShellSetup;
@@ -37,6 +37,17 @@ impl Step for ShellSetup {
             BASHRC_BEGIN,
             BASHRC_END,
             BASHRC_BLOCK,
+        )?;
+
+        // write_block ran as root, so `.bashrc` (and any `.dali.bak` backup) are
+        // now root-owned; hand the home tree back so the user can edit their own
+        // config. (Only those files changed owner; the rest is already theirs.)
+        ctx.sys.run(
+            &Command::new("chown")
+                .arg("-R")
+                .arg(format!("{user}:{user}"))
+                .arg(format!("/home/{user}"))
+                .in_chroot(),
         )
     }
 }
@@ -81,7 +92,7 @@ f() { find / -type f -name "$1" 2> /dev/null; }
 mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
 
 up() {
-    if command -v paru >/dev/null; then paru -Syu; else sudo pacman -Syu; fi
+    sudo pacman -Syu
     if command -v mise >/dev/null; then mise self-update -y || true; mise upgrade; fi
     command -v bun >/dev/null && bun update -g
     command -v uv >/dev/null && uv tool upgrade --all
@@ -135,6 +146,12 @@ mod tests {
             actions
                 .iter()
                 .any(|a| a.contains("write_block: /mnt/home/alice/.bashrc"))
+        );
+        // The bashrc is written as root, then handed back to the user.
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("chown -R alice:alice /home/alice"))
         );
     }
 }
