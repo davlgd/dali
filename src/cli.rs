@@ -3,10 +3,13 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use clap_complete::Shell;
 
 /// Davlgd Arch Linux Installer — an opinionated, single-binary TUI installer.
 #[derive(Debug, Parser)]
 #[command(name = "dali", version, about, long_about = None)]
+// A CLI arg struct is naturally a flat bag of independent flags.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     /// Install non-interactively from a TOML configuration file.
     ///
@@ -38,4 +41,24 @@ pub struct Cli {
     /// new system (immediately with `--yes`, after a confirmation otherwise).
     #[arg(long)]
     pub no_reboot: bool,
+
+    /// Print a shell completion script to stdout and exit (e.g. `bash`, `zsh`,
+    /// `fish`).
+    #[arg(long, value_name = "SHELL")]
+    pub completions: Option<Shell>,
+
+    /// Print a man page (roff) to stdout and exit.
+    #[arg(long)]
+    pub man: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn cli_definition_is_valid() {
+        Cli::command().debug_assert();
+    }
 }

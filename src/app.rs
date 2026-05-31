@@ -4,6 +4,9 @@ use std::io::{self, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
+use clap::CommandFactory;
+use clap_complete::Shell;
+
 use crate::cli::Cli;
 use crate::config::InstallConfig;
 use crate::error::{Error, Result};
@@ -14,6 +17,15 @@ use crate::{steps, tui};
 /// Entry point invoked by `main`. Returns `Ok(())` on a completed install,
 /// a completed dry-run, a saved config, or a clean user abort.
 pub fn run(cli: &Cli) -> Result<()> {
+    // Generator flags short-circuit before any environment checks.
+    if let Some(shell) = cli.completions {
+        print_completions(shell);
+        return Ok(());
+    }
+    if cli.man {
+        return print_man();
+    }
+
     preflight(cli.dry_run)?;
 
     // Acquire a configuration: from file (headless) or via the TUI wizard.
@@ -73,6 +85,19 @@ pub fn run(cli: &Cli) -> Result<()> {
         finish_install(offer, sys.as_ref());
     }
     Ok(())
+}
+
+/// Print a shell completion script for `shell` to stdout.
+fn print_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    clap_complete::generate(shell, &mut cmd, "dali", &mut io::stdout());
+}
+
+/// Print the man page (roff) to stdout.
+fn print_man() -> Result<()> {
+    clap_mangen::Man::new(Cli::command())
+        .render(&mut io::stdout())
+        .map_err(|e| Error::io("<stdout>", e))
 }
 
 /// What to do at the end of a real install. Rebooting is the default action;

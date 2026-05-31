@@ -77,6 +77,14 @@ system, or `provision = false` to skip the post-install tooling step.
 | `--save-config <F>`  | Write the effective config (from `--config`, or from the wizard if none) to a file and exit. Conflicts with `--dry-run`/`--yes`. |
 | `--no-reboot`        | Do not reboot at the end (default is to reboot into the new system). |
 
+`--completions <shell>` prints a shell completion script and `--man` prints a
+man page, both to stdout:
+
+```sh
+./dali --completions bash | sudo tee /usr/share/bash-completion/completions/dali
+./dali --man | sudo tee /usr/share/man/man1/dali.1 > /dev/null
+```
+
 ### Configuration file
 
 The configuration is **TOML**. Every field except `disk` and `user` has a
