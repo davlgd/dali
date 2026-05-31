@@ -74,7 +74,7 @@ confirmation otherwise); pass `--no-reboot` to stay on the live environment.
 
 ## Install
 
-Each GitHub release ships a static x86-64 binary. From the Arch live ISO:
+Each GitHub release ships a static x86-64 binary. From the live ISO:
 
 ```sh
 curl -fLO https://github.com/davlgd/dali/releases/latest/download/dali-linux-x86_64-musl
@@ -87,14 +87,16 @@ Verify it against the published `SHA256SUMS` if you like. A glibc build
 
 ## Requirements
 
-DALI runs from the **Arch Linux live ISO booted in UEFI mode**, as **root**. A
-real install refuses to proceed otherwise. The interactive TUI needs a genuine
+DALI runs from an Arch-based live environment **booted in UEFI mode**, as
+**root** — the [Arch Linux live ISO](https://archlinux.org/download/) or
+[SystemRescue](https://www.system-rescue.org/Download/). A real install refuses
+to proceed otherwise. The interactive TUI needs a genuine
 terminal; on any other Linux box you can still rehearse the whole plan with
 `cargo run -- --dry-run --config examples/minimal.json`, which changes nothing.
 
 ## Usage
 
-From the Arch live ISO:
+From the live ISO:
 
 ```sh
 # Interactive (a single-screen TUI with sensible defaults pre-filled):
