@@ -36,10 +36,10 @@ More precisely, every install gets:
   `vim` — plus the matching CPU microcode (`intel-ucode`/`amd-ucode`),
   `zram-generator` when zram is on, and any extras you list.
 - **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
-  `bash-completion`, `bat`, `docker`, `docker-buildx`, `fastfetch`, `ffmpeg`,
-  `glab`, `htop`, `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`,
-  `minio-client`, `nano`, `openssh`, `uv`, `whois`, `yt-dlp`, `zellij` — with
-  `docker.service`,
+  `bash-completion`, `bash-preexec`, `bat`, `docker`, `docker-buildx`,
+  `fastfetch`, `ffmpeg`, `glab`, `htop`, `impala`, `jless`, `jq`, `lazydocker`,
+  `lazygit`, `less`, `minio-client`, `nano`, `openssh`, `uv`, `whois`, `yt-dlp`,
+  `zellij` — with `docker.service`,
   `avahi-daemon.service` and `sshd.service` enabled and the user added to the
   `docker` group.
 - **SSH keys** (optional, `github_user`): when set, that GitHub account's public
@@ -50,7 +50,8 @@ More precisely, every install gets:
   every `pacman` transaction — so a bad upgrade can be rolled back. `/home` is
   deliberately not snapshotted.
 - **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
-  `mise` activation, helper functions (`check`, `clean_cargo`, `f`, `mkcd`, `up`,
+  `mise` and `atuin` activation (the latter via `bash-preexec`), helper functions
+  (`check`, `clean_cargo`, `f`, `mkcd`, `up`,
   `w` — `up` updates the system, mise tools, global bun packages, uv tools and
   the V compiler in one go)
   and aliases (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
@@ -83,9 +84,9 @@ More precisely, every install gets:
   (a dev box exhausts the default almost immediately) and a systemd
   `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and
   `net.ipv4.tcp_mtu_probing = 1` (robust SSH/transfers behind broken PMTUD).
-- **Login banners**: `/etc/issue` shows the machine's live IPv4 (via agetty's
-  `\4`) at the console login prompt — so you can see where to SSH in — and
-  `/etc/motd` is a short welcome that points at `up`.
+- **Login banner**: a NetworkManager dispatcher keeps `/etc/issue` showing the
+  machine's LAN IPv4 (the egress address, never the `docker0` bridge) at the
+  console login prompt — so you can see where to SSH in.
 - **Install log**: the full install transcript is written to
   `/var/log/dali-install.log` in the target, and a per-step completion map to
   `/var/log/dali-steps.toml`, for post-install (or partial-install) diagnosis.
