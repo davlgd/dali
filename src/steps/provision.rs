@@ -35,12 +35,14 @@ impl Step for Provision {
         // public resolver for the duration. NetworkManager manages
         // /etc/resolv.conf itself after first boot, overwriting this. Remove any
         // existing file first in case a package shipped it as a symlink (which
-        // `write` would otherwise follow).
+        // `write` would otherwise follow). This `rm` runs on the host against the
+        // `/mnt` path, not in the chroot: `arch-chroot` bind-mounts the live
+        // system's /etc/resolv.conf over the target's, so an in-chroot `rm` would
+        // hit a busy mount point and fail.
         ctx.sys.run(
             &Command::new("rm")
                 .arg("-f")
-                .arg("/etc/resolv.conf")
-                .in_chroot(),
+                .arg(target_path("/etc/resolv.conf")),
         )?;
         ctx.sys.write(
             &target_path("/etc/resolv.conf"),
