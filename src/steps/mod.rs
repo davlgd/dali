@@ -12,6 +12,7 @@ mod fstab;
 mod host_pacman;
 mod initramfs;
 mod localization;
+mod login_banner;
 mod network;
 mod partition;
 mod provenance;
@@ -75,6 +76,7 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
         Box::new(localization::Localization),
         Box::new(network::CarryNetwork),
         Box::new(provenance::Provenance),
+        Box::new(login_banner::LoginBanner),
         Box::new(initramfs::Initramfs),
         Box::new(bootloader::Bootloader),
         Box::new(users::Users),
@@ -184,6 +186,7 @@ mod tests {
                 "Configure localization",
                 "Carry network configuration",
                 "Write provenance marker",
+                "Write login banners",
                 "Build initramfs",
                 "Install bootloader",
                 "Create users",

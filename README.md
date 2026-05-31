@@ -85,6 +85,9 @@ More precisely, every install gets:
   (a dev box exhausts the default almost immediately) and a systemd
   `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and
   `net.ipv4.tcp_mtu_probing = 1` (robust SSH/transfers behind broken PMTUD).
+- **Login banners**: `/etc/issue` shows the machine's live IPv4 (via agetty's
+  `\4`) at the console login prompt — so you can see where to SSH in — and
+  `/etc/motd` is a short welcome that points at `up`.
 - **Provenance**: `/etc/dali-release` records that DALI provisioned the system
   (and which version), and `/etc/os-release` gains additive `DALI_*` fields
   while keeping `ID=arch` / `PRETTY_NAME="Arch Linux"` — it stays Arch.
