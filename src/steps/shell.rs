@@ -73,6 +73,13 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$P
 # Activate mise (runtime/tool manager) when installed.
 command -v mise >/dev/null && eval "$(mise activate bash)"
 
+# Atuin shell history — needs bash-preexec for bash; both are guarded so this is
+# a no-op if the curated app set was not installed.
+if command -v atuin >/dev/null; then
+    [ -f /usr/share/bash-preexec/bash-preexec.sh ] && . /usr/share/bash-preexec/bash-preexec.sh
+    eval "$(atuin init bash)"
+fi
+
 check() {
     if curl --output /dev/null --silent --head --fail "$1"; then
         echo "$1 is online"

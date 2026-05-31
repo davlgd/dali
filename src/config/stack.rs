@@ -43,6 +43,7 @@ pub const DEFAULT_APPS: &[&str] = &[
     "atuin",
     "avahi",
     "bash-completion",
+    "bash-preexec",
     "bat",
     "docker",
     "docker-buildx",
