@@ -27,7 +27,7 @@ mod users;
 
 use crate::config::InstallConfig;
 use crate::error::Result;
-use crate::report::Reporter;
+use crate::report::{Reporter, TranscriptReporter};
 use crate::system::{Command, Sys, target_path};
 
 /// Everything a step needs to do its job.
@@ -99,17 +99,31 @@ pub fn install(config: &InstallConfig, sys: &dyn Sys, reporter: &mut dyn Reporte
 
     let steps = pipeline();
     let total = steps.len();
+    // Capture a transcript alongside the live reporter so it can be written into
+    // the installed system as an install log.
+    let mut transcript = TranscriptReporter::new(reporter);
     for (i, step) in steps.iter().enumerate() {
-        reporter.step_start(i + 1, total, step.name());
+        transcript.step_start(i + 1, total, step.name());
         let mut ctx = Context {
             config,
             sys,
-            reporter,
+            reporter: &mut transcript,
         };
         step.run(&mut ctx)?;
-        reporter.step_done(step.name());
+        transcript.step_done(step.name());
     }
+
+    write_install_log(sys, &transcript)?;
     Ok(())
+}
+
+/// Persist the install transcript into the target as `/var/log/dali-install.log`.
+fn write_install_log(sys: &dyn Sys, transcript: &TranscriptReporter) -> Result<()> {
+    sys.mkdir_p(&target_path("/var/log"))?;
+    sys.write(
+        &target_path("/var/log/dali-install.log"),
+        transcript.transcript(),
+    )
 }
 
 /// Shared test helpers for exercising individual steps against a dry-run `Sys`.
@@ -212,6 +226,12 @@ mod tests {
         assert!(actions.iter().any(|a| a.contains("pacstrap")));
         assert!(actions.iter().any(|a| a.contains("bootctl")));
         assert!(actions.iter().any(|a| a.contains("useradd")));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/var/log/dali-install.log")),
+            "the install transcript is written into the target"
+        );
     }
 
     #[test]
