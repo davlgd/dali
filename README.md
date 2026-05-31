@@ -173,9 +173,10 @@ filter, arrow-select) — no need to remember exact identifiers.
   install and the installed system pull from fast mirrors.
 - **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists`,
   applied to the live system (faster install) and the target.
-- **Network carry-over**: the live ISO's NetworkManager/iwd profiles are copied
-  into the target (mode `0600`), so a Wi-Fi install reconnects after reboot
-  without re-entering credentials.
+- **Network carry-over**: the live environment's connections are carried into
+  the target (mode `0600`) so a Wi-Fi install reconnects after reboot — NM
+  profiles as-is, and iwd profiles (the ISO's Wi-Fi backend) converted to
+  NetworkManager keyfiles so they work under NM's default backend.
 - **Wireless regdom**: the regulatory domain is derived from the timezone's
   country (e.g. `Europe/Paris` → `FR`), so Wi-Fi uses the right channels/power.
 - **GnuPG keyservers**: `/etc/gnupg/dirmngr.conf` gets several keyservers and a
