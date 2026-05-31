@@ -45,8 +45,10 @@ More precisely, every install gets:
   keys (`https://github.com/<user>.keys`) are imported as the user's accepted
   SSH keys (`~/.ssh/authorized_keys`).
 - **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
-  `mise` activation, helper functions (`check`, `clean_cargo`, `f`, `mkcd`, `w`)
-  and aliases (`add`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
+  `mise` activation, helper functions (`check`, `clean_cargo`, `f`, `mkcd`, `up`,
+  `w` — `up` updates the system + AUR, mise tools, global bun packages, uv
+  tools and the V compiler in one go)
+  and aliases (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…,
   `dps`, `myip`, `pgen`).
 - **Provisioning** (`provision`, on by default, best-effort): bootstraps the
   [`paru`](https://github.com/Morganamilo/paru) AUR helper, installs any

@@ -71,6 +71,14 @@ f() { find / -type f -name "$1" 2> /dev/null; }
 
 mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
 
+up() {
+    if command -v paru >/dev/null; then paru -Syu; else sudo pacman -Syu; fi
+    if command -v mise >/dev/null; then mise self-update -y || true; mise upgrade; fi
+    command -v bun >/dev/null && bun update -g
+    command -v uv >/dev/null && uv tool upgrade --all
+    command -v v >/dev/null && v up
+}
+
 w() {
     if [[ "$2" == "--full" ]]; then
         curl "wttr.in/${1}"
@@ -87,6 +95,7 @@ alias gri='git rebase -i'
 alias grroot='git rebase -i --root'
 alias gst='git status'
 alias gsw='git switch'
+alias list='pacman -Qe'
 alias myip='curl -s monip.org | sed "s/</\n</g" | sed -n "s/.*IP : \([0-9.]*\).*/IP: \1/p; s/<i>\(.*\)/Reverse: \1/p"'
 alias pgen='gpg --gen-random --armor 2 32'
 alias remove='sudo pacman -Rns'
