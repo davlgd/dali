@@ -6,11 +6,14 @@ keymap = "fr"
 root_password = ""
 github_user = "davlgd"
 extra_packages = ["htop"]
-aur_packages = ["kernel-modules-hook"]
+# aur_packages defaults to ["kernel-modules-hook"]; set it to add your own
+# (an explicit value replaces the default, so include it to keep the hook):
+# aur_packages = ["kernel-modules-hook", "your-aur-package"]
 zram_swap = true
 default_apps = true
 provision = true
-custom_commands = []
+# custom_commands run as your user in the target at the end of provisioning:
+# custom_commands = ["git config --global pull.rebase true"]
 
 [user]
 username = "david"
