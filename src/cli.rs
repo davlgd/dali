@@ -8,7 +8,7 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(name = "dali", version, about, long_about = None)]
 pub struct Cli {
-    /// Install non-interactively from a JSON configuration file.
+    /// Install non-interactively from a TOML configuration file.
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 

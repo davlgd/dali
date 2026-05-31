@@ -61,7 +61,7 @@ step: always go through `ctx.sys` so the action is dry-run-able and testable.
 Rehearse the full plan without touching anything:
 
 ```sh
-cargo run -- --dry-run --config examples/full.json
+cargo run -- --dry-run --config examples/full.toml
 ```
 
 For real-system changes, run the QEMU end-to-end test (see

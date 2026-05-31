@@ -49,9 +49,13 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    /// (De)serialization of a configuration file failed.
+    /// Parsing a configuration file failed.
     #[error("could not parse configuration: {0}")]
-    Serde(#[from] serde_json::Error),
+    De(#[from] toml::de::Error),
+
+    /// Serializing the configuration failed.
+    #[error("could not serialize configuration: {0}")]
+    Ser(#[from] toml::ser::Error),
 
     /// The terminal user interface failed.
     #[error("terminal interface error: {0}")]

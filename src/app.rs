@@ -18,7 +18,7 @@ pub fn run(cli: &Cli) -> Result<()> {
 
     // Acquire a configuration: from file (headless) or via the TUI wizard.
     let config = match &cli.config {
-        Some(path) => InstallConfig::from_json_file(path)?,
+        Some(path) => InstallConfig::from_toml_file(path)?,
         None => match tui::run_wizard(InstallConfig::default())? {
             Some(config) => config,
             None => return Err(Error::Aborted),
@@ -224,7 +224,7 @@ fn require_exists(path: &str, message: &str) -> Result<()> {
 /// The file contains plaintext passwords, so it is created with `0600`
 /// permissions rather than relying on the umask.
 fn save_config(config: &InstallConfig, path: &Path) -> Result<()> {
-    let json = config.to_json()?;
+    let toml = config.to_toml()?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -232,7 +232,7 @@ fn save_config(config: &InstallConfig, path: &Path) -> Result<()> {
         .mode(0o600)
         .open(path)
         .map_err(|e| Error::io(path, e))?;
-    file.write_all(json.as_bytes())
+    file.write_all(toml.as_bytes())
         .map_err(|e| Error::io(path, e))?;
     println!("Configuration written to {} (mode 0600)", path.display());
     println!("warning: this file contains plaintext passwords — keep it safe.");
@@ -342,9 +342,9 @@ mod tests {
             extra_packages: vec!["htop".to_owned(), "git".to_owned()],
             ..InstallConfig::default()
         };
-        let path = std::path::PathBuf::from("/tmp/cfg.json");
+        let path = std::path::PathBuf::from("/tmp/cfg.toml");
         let joined = confirm_summary(&config, false, Some(&path)).join("\n");
-        assert!(joined.contains("config   : /tmp/cfg.json"));
+        assert!(joined.contains("config   : /tmp/cfg.toml"));
         assert!(joined.contains("root     : password set"));
         assert!(joined.contains("extras   : htop, git"));
         assert!(joined.contains("network  : NOT DETECTED"));

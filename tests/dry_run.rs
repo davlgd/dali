@@ -7,11 +7,11 @@ use std::process::Command;
 
 /// Write a config to a temp file, run `dali --dry-run --config <file>`, and
 /// return its captured stdout. `tag` keeps concurrent tests in separate dirs.
-fn run_dry(tag: &str, config_json: &str) -> (bool, String) {
+fn run_dry(tag: &str, config_toml: &str) -> (bool, String) {
     let dir = std::env::temp_dir().join(format!("dali-it-{}-{tag}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let config = dir.join("config.json");
-    std::fs::write(&config, config_json).unwrap();
+    let config = dir.join("config.toml");
+    std::fs::write(&config, config_toml).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_dali"))
         .arg("--dry-run")
@@ -25,12 +25,15 @@ fn run_dry(tag: &str, config_json: &str) -> (bool, String) {
     (output.status.success(), stdout)
 }
 
-const VALID_CONFIG: &str = r#"{
-  "disk": "/dev/vda",
-  "hostname": "dali-it",
-  "user": { "username": "tester", "password": "secret" },
-  "extra_packages": ["htop"]
-}"#;
+const VALID_CONFIG: &str = r#"
+disk = "/dev/vda"
+hostname = "dali-it"
+extra_packages = ["htop"]
+
+[user]
+username = "tester"
+password = "secret"
+"#;
 
 #[test]
 fn dry_run_emits_a_complete_plan() {
@@ -59,7 +62,7 @@ fn dry_run_emits_a_complete_plan() {
 #[test]
 fn invalid_config_is_rejected_without_side_effects() {
     // Missing disk and password — validation must fail before any action.
-    let (ok, out) = run_dry("invalid", r#"{ "hostname": "x" }"#);
+    let (ok, out) = run_dry("invalid", "hostname = \"x\"\n");
     assert!(!ok, "invalid config should fail");
     assert!(
         !out.contains("sgdisk"),

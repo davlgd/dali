@@ -43,7 +43,7 @@ cargo build --release
 python3 scripts/e2e.py \
   --iso archlinux-x86_64.iso \
   --dali target/release/dali \
-  --config examples/full.json \
+  --config examples/full.toml \
   --hostname dali-test
 ```
 

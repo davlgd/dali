@@ -1,0 +1,16 @@
+disk = "/dev/vda"
+hostname = "dali-test"
+timezone = "Europe/Paris"
+locale = "en_US.UTF-8"
+keymap = "fr"
+root_password = ""
+github_user = "davlgd"
+extra_packages = ["htop"]
+aur_packages = []
+zram_swap = true
+default_apps = true
+provision = true
+
+[user]
+username = "david"
+password = "changeme"

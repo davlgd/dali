@@ -47,8 +47,6 @@ pub struct InstallConfig {
     pub locale: String,
     /// Console keymap, e.g. `us` or `fr`.
     pub keymap: String,
-    /// The administrator account to create (member of `wheel`, sudo-enabled).
-    pub user: UserAccount,
     /// Root password. If empty, the root account is locked and administration
     /// happens exclusively through the sudo-enabled [`Self::user`].
     pub root_password: Secret,
@@ -73,6 +71,11 @@ pub struct InstallConfig {
     /// [`Self::aur_packages`]) and the `mise` / Claude Code installers.
     /// Best-effort and network-bound.
     pub provision: bool,
+    /// The administrator account to create (member of `wheel`, sudo-enabled).
+    ///
+    /// Kept last so it serializes as a trailing `[user]` TOML table (TOML
+    /// forbids bare keys after a table at the same level).
+    pub user: UserAccount,
 }
 
 impl Default for InstallConfig {
@@ -83,11 +86,6 @@ impl Default for InstallConfig {
             timezone: "UTC".to_owned(),
             locale: "en_US.UTF-8".to_owned(),
             keymap: "us".to_owned(),
-            user: UserAccount {
-                // No default username on purpose — the user must choose one.
-                username: String::new(),
-                password: Secret::default(),
-            },
             root_password: Secret::default(),
             github_user: String::new(),
             extra_packages: Vec::new(),
@@ -95,22 +93,26 @@ impl Default for InstallConfig {
             zram_swap: true,
             default_apps: true,
             provision: true,
+            user: UserAccount {
+                // No default username on purpose — the user must choose one.
+                username: String::new(),
+                password: Secret::default(),
+            },
         }
     }
 }
 
 impl InstallConfig {
-    /// Load a configuration from a JSON file.
-    pub fn from_json_file(path: &Path) -> Result<Self> {
+    /// Load a configuration from a TOML file.
+    pub fn from_toml_file(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-        let config: Self = serde_json::from_str(&raw)?;
-        Ok(config)
+        Ok(toml::from_str(&raw)?)
     }
 
-    /// Serialize the configuration to pretty JSON, redacting nothing — callers
+    /// Serialize the configuration to pretty TOML, redacting nothing — callers
     /// that persist this must treat it as sensitive (it contains passwords).
-    pub fn to_json(&self) -> Result<String> {
-        Ok(serde_json::to_string_pretty(self)?)
+    pub fn to_toml(&self) -> Result<String> {
+        Ok(toml::to_string_pretty(self)?)
     }
 
     /// All packages installed by `pacstrap`: the base set, the curated app set
@@ -237,11 +239,20 @@ mod tests {
     }
 
     #[test]
-    fn config_roundtrips_through_json() {
+    fn config_roundtrips_through_toml() {
         let config = config_with("/dev/vda", "pw");
-        let json = config.to_json().unwrap();
-        let parsed: InstallConfig = serde_json::from_str(&json).unwrap();
+        let toml = config.to_toml().unwrap();
+        let parsed: InstallConfig = toml::from_str(&toml).unwrap();
         assert_eq!(parsed.disk, "/dev/vda");
         assert_eq!(parsed.user.password.expose(), "pw");
+    }
+
+    #[test]
+    fn to_toml_serializes_and_reparses() {
+        // Guards the field-ordering trap: `[user]` must be the trailing table,
+        // otherwise TOML serialization fails (bare key after a table).
+        let toml = config_with("/dev/vda", "pw").to_toml().unwrap();
+        assert!(toml.contains("[user]"), "expected a [user] table:\n{toml}");
+        assert!(toml::from_str::<InstallConfig>(&toml).is_ok());
     }
 }

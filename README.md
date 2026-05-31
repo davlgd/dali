@@ -92,7 +92,7 @@ DALI runs from an Arch-based live environment **booted in UEFI mode**, as
 [SystemRescue](https://www.system-rescue.org/Download/). A real install refuses
 to proceed otherwise. The interactive TUI needs a genuine
 terminal; on any other Linux box you can still rehearse the whole plan with
-`cargo run -- --dry-run --config examples/minimal.json`, which changes nothing.
+`cargo run -- --dry-run --config examples/minimal.toml`, which changes nothing.
 
 ## Usage
 
@@ -103,17 +103,17 @@ From the live ISO:
 ./dali
 
 # See exactly what would happen, changing nothing:
-./dali --dry-run --config myconfig.json
+./dali --dry-run --config myconfig.toml
 
 # Fully automated, no prompts (for scripted / repeatable installs):
-./dali --config myconfig.json --yes
+./dali --config myconfig.toml --yes
 ```
 
 ### Flags
 
 | Flag                 | Effect                                                       |
 |----------------------|--------------------------------------------------------------|
-| `--config <FILE>`    | Install non-interactively from a JSON config (see below).    |
+| `--config <FILE>`    | Install non-interactively from a TOML config (see below).    |
 | `--dry-run`          | Print the exact plan of actions and exit without changes.    |
 | `--yes`              | Skip the final "erase the disk" confirmation. Requires `--config`. |
 | `--save-config <F>`  | Write the effective config (from `--config`, or from the wizard if none) to a file and exit. Conflicts with `--dry-run`/`--yes`. |
@@ -121,30 +121,34 @@ From the live ISO:
 
 ### Configuration file
 
-Every field except `disk` and `user` has a sensible default and may be
-omitted. The smallest useful config ([`examples/minimal.json`](examples/minimal.json)):
+The configuration is **TOML**. Every field except `disk` and `user` has a
+sensible default and may be omitted. The smallest useful config
+([`examples/minimal.toml`](examples/minimal.toml)):
 
-```json
-{
-  "disk": "/dev/vda",
-  "user": { "username": "arch", "password": "changeme" }
-}
+```toml
+disk = "/dev/vda"
+
+[user]
+username = "arch"
+password = "changeme"
 ```
 
-A fully specified config ([`examples/full.json`](examples/full.json)):
+A fully specified config ([`examples/full.toml`](examples/full.toml)):
 
-```json
-{
-  "disk": "/dev/vda",
-  "hostname": "dali-test",
-  "timezone": "Europe/Paris",
-  "locale": "en_US.UTF-8",
-  "keymap": "fr",
-  "user": { "username": "david", "password": "changeme" },
-  "root_password": "",
-  "extra_packages": ["htop"],
-  "zram_swap": true
-}
+```toml
+disk = "/dev/vda"
+hostname = "dali-test"
+timezone = "Europe/Paris"
+locale = "en_US.UTF-8"
+keymap = "fr"
+root_password = ""
+extra_packages = ["htop"]
+zram_swap = true
+
+# The [user] table must come last (TOML forbids bare keys after a table).
+[user]
+username = "david"
+password = "changeme"
 ```
 
 An empty `root_password` **locks the root account**; administration then
@@ -190,7 +194,7 @@ cargo fmt --check                           # formatting
 
 # Rehearse the whole install plan on any Linux box — no Arch, root or hardware
 # needed, changes nothing:
-cargo run -- --dry-run --config examples/minimal.json
+cargo run -- --dry-run --config examples/minimal.toml
 ```
 
 DALI is tested at three levels — unit, a process-level dry-run integration
@@ -229,7 +233,7 @@ cargo build --release
 python3 scripts/e2e.py \
   --iso archlinux-x86_64.iso \
   --dali target/release/dali \
-  --config examples/full.json
+  --config examples/full.toml
 ```
 
 Requires `qemu`, `edk2-ovmf`, `bsdtar`, `e2fsprogs` and access to `/dev/kvm`.

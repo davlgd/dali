@@ -18,7 +18,6 @@ with bsdtar and the payload is built with `mkfs.ext4 -d` — no mounts, no sudo.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import select
@@ -103,7 +102,7 @@ def prepare(work: Path, iso: Path, dali_bin: Path, config: Path) -> Prepared:
     payload_dir.mkdir(exist_ok=True)
     shutil.copy(dali_bin, payload_dir / "dali")
     os.chmod(payload_dir / "dali", 0o755)
-    shutil.copy(config, payload_dir / "config.json")
+    shutil.copy(config, payload_dir / "config.toml")
     payload = work / "payload.img"
     run(["mkfs.ext4", "-q", "-F", "-d", str(payload_dir), str(payload), "64M"])
 
@@ -211,7 +210,7 @@ def phase_install(p: Prepared, work: Path) -> None:
         vm.expect(r"root@archiso", timeout=60)
         vm.send("mkdir -p /payload && mount /dev/vdb /payload && echo MOUNTED_$?")
         vm.expect(r"MOUNTED_0", timeout=30)
-        vm.send("/payload/dali --config /payload/config.json --yes --no-reboot; echo DALI_RC=$?")
+        vm.send("/payload/dali --config /payload/config.toml --yes --no-reboot; echo DALI_RC=$?")
         out = vm.expect(r"DALI_RC=\d", timeout=1800)
         rc = re.search(r"DALI_RC=(\d)", out)
         if not rc or rc.group(1) != "0":
@@ -261,8 +260,13 @@ def main() -> int:
 
     require_tools()
     # Phase 2 waits for "<hostname> login:"; derive it from the config so it
-    # cannot drift out of sync (the config default hostname is 'arch').
-    hostname = args.hostname or json.loads(args.config.read_text()).get("hostname", "arch")
+    # cannot drift out of sync (the config default hostname is 'arch'). Parsed
+    # with a regex rather than a TOML lib (tomllib is Python 3.11+ only).
+    hostname = args.hostname or "arch"
+    if not args.hostname:
+        match = re.search(r'^\s*hostname\s*=\s*"([^"]+)"', args.config.read_text(), re.MULTILINE)
+        if match:
+            hostname = match.group(1)
     prepared = prepare(args.work, args.iso, args.dali, args.config)
     phase_install(prepared, args.work)
     phase_boot(prepared, hostname, args.work)
