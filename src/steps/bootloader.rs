@@ -52,7 +52,7 @@ impl Step for Bootloader {
             .write(&target_path("/boot/loader/loader.conf"), LOADER_CONF)?;
         ctx.sys.write(
             &target_path("/boot/loader/entries/arch.conf"),
-            &entry(&uuid, microcode),
+            &entry(&uuid, microcode, ctx.config.zram_swap),
         )?;
         Ok(())
     }
@@ -65,16 +65,19 @@ const LOADER_CONF: &str = "default arch.conf\ntimeout 3\nconsole-mode max\nedito
 ///
 /// `microcode` is the matching microcode package name (e.g. `intel-ucode`); its
 /// initrd line is emitted before the kernel initramfs, as systemd-boot requires.
-fn entry(root_uuid: &str, microcode: Option<&str>) -> String {
+/// When `zram_swap` is on, zswap is disabled on the cmdline (the two are
+/// redundant — zram is the chosen compressed-RAM swap).
+fn entry(root_uuid: &str, microcode: Option<&str>, zram_swap: bool) -> String {
     let kernel = stack::KERNEL;
     let (root_subvol, _) = stack::SUBVOLUMES[0];
     let ucode_initrd = microcode.map_or_else(String::new, |pkg| format!("initrd  /{pkg}.img\n"));
+    let zswap = if zram_swap { " zswap.enabled=0" } else { "" };
     format!(
         "title   Arch Linux\n\
          linux   /vmlinuz-{kernel}\n\
          {ucode_initrd}\
          initrd  /initramfs-{kernel}.img\n\
-         options root=UUID={root_uuid} rootfstype=btrfs rootflags=subvol={root_subvol} rw\n"
+         options root=UUID={root_uuid} rootfstype=btrfs rootflags=subvol={root_subvol} rw{zswap}\n"
     )
 }
 
@@ -84,7 +87,7 @@ mod tests {
 
     #[test]
     fn entry_pins_uuid_and_subvolume() {
-        let text = entry("dead-beef", None);
+        let text = entry("dead-beef", None, true);
         assert!(text.contains("root=UUID=dead-beef"));
         assert!(text.contains("rootflags=subvol=@"));
         assert!(text.contains("/vmlinuz-linux"));
@@ -93,17 +96,27 @@ mod tests {
 
     #[test]
     fn entry_pins_btrfs_rootfstype() {
-        assert!(entry("uuid", None).contains("rootfstype=btrfs"));
+        assert!(entry("uuid", None, true).contains("rootfstype=btrfs"));
     }
 
     #[test]
     fn microcode_initrd_precedes_kernel_initrd() {
-        let text = entry("uuid", Some("intel-ucode"));
+        let text = entry("uuid", Some("intel-ucode"), true);
         let ucode = text.find("/intel-ucode.img").unwrap();
         let kernel = text.find("/initramfs-linux.img").unwrap();
         assert!(
             ucode < kernel,
             "microcode initrd must come before the kernel initrd"
         );
+    }
+
+    #[test]
+    fn zswap_disabled_when_zram_swap_enabled() {
+        assert!(entry("uuid", None, true).contains("zswap.enabled=0"));
+    }
+
+    #[test]
+    fn zswap_param_absent_without_zram_swap() {
+        assert!(!entry("uuid", None, false).contains("zswap"));
     }
 }
