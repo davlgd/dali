@@ -29,6 +29,8 @@ pub const BASE_PACKAGES: &[&str] = &[
     "linux",
     "linux-firmware",
     "networkmanager",
+    "snap-pac",
+    "snapper",
     "sudo",
     "vim",
 ];

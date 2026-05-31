@@ -32,9 +32,9 @@ opinionated stack.
 More precisely, every install gets:
 
 - **Base packages**: `base`, `base-devel`, `btrfs-progs`, `curl`, `git`,
-  `linux`, `linux-firmware`, `networkmanager`, `sudo`, `vim` — plus the
-  matching CPU microcode (`intel-ucode`/`amd-ucode`), `zram-generator` when zram
-  is on, and any extras you list.
+  `linux`, `linux-firmware`, `networkmanager`, `snap-pac`, `snapper`, `sudo`,
+  `vim` — plus the matching CPU microcode (`intel-ucode`/`amd-ucode`),
+  `zram-generator` when zram is on, and any extras you list.
 - **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
   `bash-completion`, `bat`, `docker`, `docker-buildx`, `ffmpeg`, `glab`,
   `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`, `minio-client`,
@@ -44,6 +44,10 @@ More precisely, every install gets:
 - **SSH keys** (optional, `github_user`): when set, that GitHub account's public
   keys (`https://github.com/<user>.keys`) are imported as the user's accepted
   SSH keys (`~/.ssh/authorized_keys`).
+- **Snapshots**: `snapper` is configured for the root subvolume only (on the
+  `@snapshots` subvol), and `snap-pac` takes automatic pre/post snapshots around
+  every `pacman` transaction — so a bad upgrade can be rolled back. `/home` is
+  deliberately not snapshotted.
 - **Shell environment**: the user's `~/.bashrc` gets `~/.local/bin` on `PATH`,
   `mise` activation, helper functions (`check`, `clean_cargo`, `f`, `mkcd`, `up`,
   `w` — `up` updates the system + AUR, mise tools, global bun packages, uv
