@@ -262,6 +262,30 @@ fn parse_timezones(table: &str) -> Vec<String> {
     zones
 }
 
+/// The ISO 3166-1 alpha-2 country code for a timezone, e.g. `Europe/Paris` →
+/// `FR`. `None` when unknown (off Arch, or for region-only zones like `UTC`).
+/// Uses `zone.tab` (not `zone1970.tab`, whose first field can list several
+/// countries).
+pub fn country_from_timezone(tz: &str) -> Option<String> {
+    let table = std::fs::read_to_string("/usr/share/zoneinfo/zone.tab").ok()?;
+    lookup_country(&table, tz)
+}
+
+/// The country code (field 1) of the `zone.tab` line whose timezone (field 3)
+/// equals `tz`.
+fn lookup_country(table: &str, tz: &str) -> Option<String> {
+    table
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .find_map(|line| {
+            let mut fields = line.split('\t');
+            let country = fields.next()?;
+            let zone = fields.nth(1)?; // skip coordinates (field 2)
+            (zone == tz && country.len() == 2 && country.chars().all(|c| c.is_ascii_alphabetic()))
+                .then(|| country.to_ascii_uppercase())
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,6 +301,17 @@ mod tests {
         assert_eq!(keymap_name("fr.map.gz"), Some("fr"));
         assert_eq!(keymap_name("us.map"), Some("us"));
         assert_eq!(keymap_name("README"), None);
+    }
+
+    #[test]
+    fn lookup_country_maps_timezone_to_iso_code() {
+        let table = "#code\tcoordinates\tTZ\tcomments\n\
+                     FR\t+4852+00220\tEurope/Paris\n\
+                     JP\t+353916+1394441\tAsia/Tokyo\n";
+        assert_eq!(lookup_country(table, "Europe/Paris").as_deref(), Some("FR"));
+        assert_eq!(lookup_country(table, "Asia/Tokyo").as_deref(), Some("JP"));
+        assert_eq!(lookup_country(table, "UTC"), None);
+        assert_eq!(lookup_country(table, "Mars/Olympus"), None);
     }
 
     #[test]

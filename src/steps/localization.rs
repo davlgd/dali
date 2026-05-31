@@ -2,7 +2,7 @@
 
 use super::{Context, Step};
 use crate::error::Result;
-use crate::system::{Command, target_path};
+use crate::system::{Command, probe, target_path};
 
 /// Configures all locale-related settings in the target system.
 pub struct Localization;
@@ -45,6 +45,16 @@ impl Step for Localization {
             &format!("KEYMAP={}\n", config.keymap),
         )?;
 
+        // Wireless regulatory domain, derived from the timezone's country, so
+        // Wi-Fi uses the right channels/power. Skipped when unknown.
+        if let Some(country) = probe::country_from_timezone(&config.timezone) {
+            ctx.info(format!("setting wireless regulatory domain to {country}"));
+            ctx.sys.write(
+                &target_path("/etc/conf.d/wireless-regdom"),
+                &format!("WIRELESS_REGDOM=\"{country}\"\n"),
+            )?;
+        }
+
         // Hostname and the matching /etc/hosts entries.
         ctx.info(format!("setting hostname to {}", config.hostname));
         ctx.sys.write(
@@ -73,5 +83,13 @@ mod tests {
         let hosts = hosts_file("arch");
         assert!(hosts.contains("127.0.0.1\tlocalhost"));
         assert!(hosts.contains("127.0.1.1\tarch.localdomain\tarch"));
+    }
+
+    #[test]
+    fn no_regdom_written_for_a_region_only_timezone() {
+        use crate::steps::test_support::{config, dry_actions};
+        // config() uses timezone "UTC", which has no country in zone.tab.
+        let actions = dry_actions(&Localization, &config());
+        assert!(!actions.iter().any(|a| a.contains("wireless-regdom")));
     }
 }

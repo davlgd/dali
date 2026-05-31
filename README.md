@@ -66,6 +66,9 @@ More precisely, every install gets:
   warnings and never abort the (already bootable) install. (`pamac-aur` is
   intentionally not in the defaults — it currently needs an older `libalpm`
   than Arch ships; add it to `aur_packages` once it is compatible again.)
+- **Wireless regdom**: the regulatory domain is derived from the timezone's
+  country (e.g. `Europe/Paris` → `FR`) and written to
+  `/etc/conf.d/wireless-regdom`, so Wi-Fi uses the right channels/power.
 - **System tuning** (always applied): `fs.inotify.max_user_watches = 524288`
   (a dev box exhausts the default almost immediately) and a systemd
   `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and
