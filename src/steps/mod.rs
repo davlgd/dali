@@ -239,7 +239,7 @@ mod tests {
                 "Configure localization",
                 "Carry network configuration",
                 "Write provenance marker",
-                "Write login banners",
+                "Configure login banner",
                 "Build initramfs",
                 "Install bootloader",
                 "Create users",

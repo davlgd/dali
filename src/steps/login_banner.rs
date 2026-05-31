@@ -1,41 +1,53 @@
-//! Step — write the console login banner and the message of the day.
+//! Step — show the machine's LAN IPv4 at the console login prompt, so you know
+//! where to SSH in.
 //!
-//! `/etc/issue` uses agetty's `\4` escape, which the console login prompt
-//! expands to the machine's live IPv4 address — handy for finding out where to
-//! SSH in. `/etc/motd` is a short, factual welcome shown after login.
+//! agetty's `\4` escape would pick the first interface — often `docker0` on a
+//! Docker host — so instead a NetworkManager dispatcher script regenerates
+//! `/etc/issue` with the real egress address (`ip route get`) whenever the
+//! network changes. No message of the day: it only duplicated this banner.
 
 use super::{Context, Step};
-use crate::config::stack;
 use crate::error::Result;
-use crate::system::target_path;
+use crate::system::{Command, target_path};
 
-/// Writes `/etc/issue` and `/etc/motd` into the target.
+/// Installs the login-banner dispatcher and a placeholder `/etc/issue`.
 pub struct LoginBanner;
 
 impl Step for LoginBanner {
     fn name(&self) -> &'static str {
-        "Write login banners"
+        "Configure login banner"
     }
 
     fn run(&self, ctx: &mut Context<'_>) -> Result<()> {
-        ctx.info("writing /etc/issue and /etc/motd");
-        ctx.sys.write(&target_path("/etc/issue"), ISSUE)?;
+        ctx.info("installing the login-banner dispatcher (/etc/issue with the LAN IP)");
+        // Shown until the network comes up and the dispatcher refreshes it.
         ctx.sys
-            .write(&target_path("/etc/motd"), &motd(&ctx.config.hostname))
+            .write(&target_path("/etc/issue"), ISSUE_PLACEHOLDER)?;
+
+        ctx.sys.write(&target_path(DISPATCHER), ISSUE_DISPATCHER)?;
+        ctx.sys.run(
+            &Command::new("chmod")
+                .arg("0755")
+                .arg(DISPATCHER)
+                .in_chroot(),
+        )
     }
 }
 
-/// Console pre-login banner. `\4` is an agetty escape expanded to the live IPv4
-/// address at display time — it is NOT resolved here.
-const ISSUE: &str = "\nArch Linux (provisioned by DALI)\nIPv4: \\4\n\n";
+/// NetworkManager dispatcher path (runs root-owned, on connectivity changes).
+const DISPATCHER: &str = "/etc/NetworkManager/dispatcher.d/90-dali-issue";
 
-/// Post-login message of the day.
-fn motd(hostname: &str) -> String {
-    format!(
-        "{hostname} - provisioned by DALI {}.\nRun `up` to update the system.\n",
-        stack::DALI_VERSION
-    )
-}
+/// Initial banner before the first connection comes up.
+const ISSUE_PLACEHOLDER: &str = "\nArch Linux (DALI)\nIPv4: (pending)\n\n";
+
+/// Dispatcher script: rewrite `/etc/issue` with the LAN egress IPv4. Using
+/// `ip route get` picks the address used to reach the internet (the LAN one),
+/// never the `docker0` bridge.
+const ISSUE_DISPATCHER: &str = r#"#!/bin/sh
+# DALI: keep /etc/issue showing the machine's LAN IPv4 (handy for SSH).
+ip=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p')
+printf '\nArch Linux (DALI)\nIPv4: %s\n\n' "${ip:-(pending)}" > /etc/issue
+"#;
 
 #[cfg(test)]
 mod tests {
@@ -43,26 +55,22 @@ mod tests {
     use crate::steps::test_support::{config, dry_actions};
 
     #[test]
-    fn writes_issue_and_motd() {
+    fn installs_issue_and_the_dispatcher() {
         let actions = dry_actions(&LoginBanner, &config());
         assert!(actions.iter().any(|a| a.contains("/mnt/etc/issue")));
-        assert!(actions.iter().any(|a| a.contains("/mnt/etc/motd")));
-    }
-
-    #[test]
-    fn issue_uses_the_agetty_ip_escape_not_a_resolved_address() {
         assert!(
-            ISSUE.contains("\\4"),
-            "issue must carry the literal \\4 escape"
+            actions
+                .iter()
+                .any(|a| a.contains("/mnt/etc/NetworkManager/dispatcher.d/90-dali-issue"))
         );
+        assert!(actions.iter().any(|a| a.contains("chmod 0755")
+            && a.contains("/etc/NetworkManager/dispatcher.d/90-dali-issue")));
     }
 
     #[test]
-    fn motd_is_factual_and_mentions_up() {
-        let motd = motd("server01");
-        assert!(motd.contains("server01"));
-        assert!(motd.contains("provisioned by DALI"));
-        assert!(motd.contains("Run `up`"));
-        assert!(motd.contains(env!("CARGO_PKG_VERSION")));
+    fn dispatcher_derives_the_lan_ip_not_the_agetty_escape() {
+        // Must compute the egress IP (excludes docker0), not rely on `\4`.
+        assert!(ISSUE_DISPATCHER.contains("ip -4 route get 1.1.1.1"));
+        assert!(!ISSUE_DISPATCHER.contains("\\4"));
     }
 }
