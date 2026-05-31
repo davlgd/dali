@@ -1,4 +1,4 @@
-//! Step 6 — (re)build the initramfs for every installed kernel preset.
+//! Step — (re)build the initramfs for every installed kernel preset.
 //!
 //! `pacstrap` already triggers a build when the kernel is installed, but we
 //! regenerate explicitly so the result reflects any configuration written in

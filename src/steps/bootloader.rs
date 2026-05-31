@@ -1,4 +1,4 @@
-//! Step 7 — install systemd-boot and write a boot entry for the `linux` kernel.
+//! Step — install systemd-boot and write a boot entry for the `linux` kernel.
 
 use super::{Context, Step};
 use crate::config::stack;

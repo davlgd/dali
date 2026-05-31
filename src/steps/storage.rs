@@ -1,4 +1,4 @@
-//! Step 2 — create filesystems, the Btrfs subvolume layout, and mount
+//! Step — create filesystems, the Btrfs subvolume layout, and mount
 //! everything under the live mountpoint ready for `pacstrap`.
 
 use super::{Context, Step};

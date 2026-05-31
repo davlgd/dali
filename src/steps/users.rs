@@ -1,4 +1,4 @@
-//! Step 8 — set the root password (or lock it) and create the sudo-enabled
+//! Step — set the root password (or lock it) and create the sudo-enabled
 //! administrator account.
 
 use super::{Context, Step, write_sudoers};

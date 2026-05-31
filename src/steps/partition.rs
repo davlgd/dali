@@ -1,4 +1,4 @@
-//! Step 1 — wipe the target disk and lay down a GPT with an EFI System
+//! Step — wipe the target disk and lay down a GPT with an EFI System
 //! Partition and a single root partition.
 
 use super::{Context, Step};

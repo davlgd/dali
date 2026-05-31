@@ -1,4 +1,4 @@
-//! Step 4 — generate `/etc/fstab` from the currently mounted layout.
+//! Step — generate `/etc/fstab` from the currently mounted layout.
 
 use super::{Context, Step};
 use crate::config::stack;

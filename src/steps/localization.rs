@@ -1,4 +1,4 @@
-//! Step 5 — timezone, clock, locale, console keymap and hostname.
+//! Step — timezone, clock, locale, console keymap and hostname.
 
 use super::{Context, Step};
 use crate::error::Result;

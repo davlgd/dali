@@ -64,8 +64,7 @@ More precisely, every install gets:
   `opencode` and `pi` globally via `mise`. Network-bound; failures are reported
   as warnings and never abort the (already bootable) install. Any
   `custom_commands` you list run as your user inside the target at the end of
-  this step. (AUR provisioning is currently disabled: the prebuilt `paru-bin`
-  and `pamac-aur` both link an older `libalpm` than Arch ships.)
+  this step.
 - **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists` are
   enabled — on the live system before `pacstrap` (faster install) and in the
   target so it persists.

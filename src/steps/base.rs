@@ -1,4 +1,4 @@
-//! Step 3 — install the base system into the mounted target with `pacstrap`.
+//! Step — install the base system into the mounted target with `pacstrap`.
 
 use super::{Context, Step};
 use crate::config::stack;
