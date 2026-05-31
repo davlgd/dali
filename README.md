@@ -36,8 +36,8 @@ More precisely, every install gets:
   `vim` — plus the matching CPU microcode (`intel-ucode`/`amd-ucode`),
   `zram-generator` when zram is on, and any extras you list.
 - **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
-  `bash-completion`, `bat`, `docker`, `docker-buildx`, `ffmpeg`, `glab`,
-  `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`, `minio-client`,
+  `bash-completion`, `bat`, `docker`, `docker-buildx`, `fastfetch`, `ffmpeg`,
+  `glab`, `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`, `minio-client`,
   `nano`, `openssh`, `uv`, `whois`, `yt-dlp`, `zellij` — with `docker.service`,
   `avahi-daemon.service` and `sshd.service` enabled and the user added to the
   `docker` group.

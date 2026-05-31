@@ -46,6 +46,7 @@ pub const DEFAULT_APPS: &[&str] = &[
     "bat",
     "docker",
     "docker-buildx",
+    "fastfetch",
     "ffmpeg",
     "glab",
     "impala",
