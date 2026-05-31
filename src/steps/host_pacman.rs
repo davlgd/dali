@@ -70,6 +70,7 @@ pub(crate) fn tune_pacman_conf(body: &str) -> String {
     let mut out: Vec<String> = Vec::with_capacity(body.lines().count() + SETTINGS.len());
     let mut applied = [false; SETTINGS.len()];
     let mut in_options = false;
+    let mut saw_options = false;
 
     for raw in body.lines() {
         let trimmed = raw.trim();
@@ -78,6 +79,7 @@ pub(crate) fn tune_pacman_conf(body: &str) -> String {
                 flush_missing(&mut out, &mut applied);
             }
             in_options = trimmed == "[options]";
+            saw_options |= in_options;
             out.push(raw.to_owned());
             continue;
         }
@@ -85,8 +87,9 @@ pub(crate) fn tune_pacman_conf(body: &str) -> String {
             let bare = trimmed.trim_start_matches('#').trim();
             if let Some(i) = SETTINGS.iter().position(|(key, _)| {
                 bare == *key
-                    || bare.starts_with(&format!("{key} "))
-                    || bare.starts_with(&format!("{key}="))
+                    || bare
+                        .strip_prefix(key)
+                        .is_some_and(|rest| rest.starts_with(' ') || rest.starts_with('='))
             }) {
                 if !applied[i] {
                     out.push(SETTINGS[i].1.to_owned());
@@ -98,6 +101,10 @@ pub(crate) fn tune_pacman_conf(body: &str) -> String {
         out.push(raw.to_owned());
     }
     if in_options {
+        flush_missing(&mut out, &mut applied);
+    } else if !saw_options {
+        // No `[options]` section at all — add one so the settings still apply.
+        out.push("[options]".to_owned());
         flush_missing(&mut out, &mut applied);
     }
 
@@ -140,6 +147,15 @@ mod tests {
         assert!(out.contains("ParallelDownloads = 5"));
         assert!(out.contains("Color"));
         assert!(out.contains("VerbosePkgLists"));
+    }
+
+    #[test]
+    fn adds_an_options_section_when_none_exists() {
+        let out = tune_pacman_conf("[core]\nInclude = /etc/pacman.d/mirrorlist\n");
+        assert!(out.contains("[options]"));
+        assert!(out.contains("ParallelDownloads = 5"));
+        // The original section is preserved.
+        assert!(out.contains("[core]"));
     }
 
     #[test]

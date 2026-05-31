@@ -119,16 +119,21 @@ impl Sys for RealSys {
 /// `block` when no such region exists. `block` carries its own markers and
 /// leading newline, so a fresh append matches a plain append.
 fn splice_block(existing: &str, begin: &str, end: &str, block: &str) -> String {
-    if let Some(b) = existing.find(begin)
-        && let Some(rel) = existing[b..].find(end)
-    {
-        let marker_end = b + rel + end.len();
-        // Extend to the end of the end-marker's line (consume its newline).
-        let line_end = existing[marker_end..]
-            .find('\n')
-            .map_or(existing.len(), |n| marker_end + n + 1);
+    if let Some(b) = existing.find(begin) {
+        // The region runs to the end of the end-marker's line, or to EOF if the
+        // end marker is missing (a previously-mangled block). Either way the
+        // whole region is replaced, so a duplicate/orphaned marker never remains.
+        let region_end = match existing[b..].find(end) {
+            Some(rel) => {
+                let marker_end = b + rel + end.len();
+                existing[marker_end..]
+                    .find('\n')
+                    .map_or(existing.len(), |n| marker_end + n + 1)
+            }
+            None => existing.len(),
+        };
         let before = existing[..b].trim_end_matches('\n');
-        let after = &existing[line_end..];
+        let after = &existing[region_end..];
 
         let mut out = String::from(before);
         out.push_str(block); // block begins with its own newline + marker
@@ -196,5 +201,21 @@ mod tests {
         assert!(Path::new(&format!("{path}.dali.bak")).exists());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn splice_block_replaces_a_block_missing_its_end_marker() {
+        let (begin, end) = ("# >>> B >>>", "# <<< B <<<");
+        // A previously-mangled block: begin present, end marker gone.
+        let existing = "keep\n# >>> B >>>\norphaned tail\n";
+        let out = splice_block(existing, begin, end, "\n# >>> B >>>\nnew\n# <<< B <<<\n");
+        assert_eq!(
+            out.matches(begin).count(),
+            1,
+            "must not duplicate the marker"
+        );
+        assert!(out.contains("# <<< B <<<"));
+        assert!(!out.contains("orphaned tail"));
+        assert!(out.starts_with("keep\n"));
     }
 }

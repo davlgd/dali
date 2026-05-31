@@ -1,10 +1,12 @@
 //! Step — best-effort post-install provisioning: the V compiler, the `mise`
 //! and Claude Code installer scripts, and any user-supplied `custom_commands`.
 //!
-//! This step is **best-effort and network-bound**: everything here runs as the
-//! freshly created user inside the target, and any failure is reported as a
-//! warning rather than aborting — the system is already bootable by this point.
-//! It is skipped entirely when `provision` is false.
+//! The installer scripts and `custom_commands` are **best-effort and
+//! network-bound**: they run as the freshly created user inside the target, and
+//! any failure is reported as a warning rather than aborting — the system is
+//! already bootable by this point. (The sudo grant/revoke and its tamper-evident
+//! check are not best-effort: they propagate errors.) Skipped when `provision`
+//! is false.
 
 use super::{Context, Step, write_sudoers};
 use crate::config::stack;

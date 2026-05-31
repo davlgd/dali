@@ -125,11 +125,11 @@ fn prompt_yes_no(question: &str, default_yes: bool) -> Result<bool> {
 /// Interpret a yes/no answer: empty (just-Enter) takes `default_yes`, otherwise
 /// only `y`/`yes` (any case) is a yes.
 fn parse_yes_no(answer: &str, default_yes: bool) -> bool {
-    let answer = answer.trim().to_ascii_lowercase();
+    let answer = answer.trim();
     if answer.is_empty() {
         default_yes
     } else {
-        answer == "y" || answer == "yes"
+        answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes")
     }
 }
 

@@ -125,9 +125,11 @@ impl InstallConfig {
         Ok(config)
     }
 
-    /// Serialize the configuration to pretty TOML, redacting nothing — callers
-    /// that persist this must treat it as sensitive (it contains passwords).
-    pub fn to_toml(&self) -> Result<String> {
+    /// Serialize the configuration to pretty TOML, redacting nothing (it
+    /// contains passwords). Test-only: real persistence goes through
+    /// [`Self::to_toml_safe`] + [`Self::to_credentials_toml`].
+    #[cfg(test)]
+    pub(crate) fn to_toml(&self) -> Result<String> {
         Ok(toml::to_string_pretty(self)?)
     }
 

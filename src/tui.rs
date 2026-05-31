@@ -725,6 +725,8 @@ impl Wizard {
             "" => "none",
             s => s,
         };
+        let github = self.text(GITHUB);
+        let github = github.trim();
         let typed = self.confirm.clone().unwrap_or_default();
 
         let mut lines = vec![
@@ -750,10 +752,10 @@ impl Wizard {
             )),
             Line::from(format!(
                 "  ssh keys {}",
-                if self.text(GITHUB).trim().is_empty() {
+                if github.is_empty() {
                     "none".to_owned()
                 } else {
-                    format!("github.com/{}", self.text(GITHUB).trim())
+                    format!("github.com/{github}")
                 }
             )),
             Line::default(),

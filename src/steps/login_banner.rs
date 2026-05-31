@@ -45,6 +45,12 @@ const ISSUE_PLACEHOLDER: &str = "\nArch Linux (DALI)\nIPv4: (pending)\n\n";
 /// never the `docker0` bridge.
 const ISSUE_DISPATCHER: &str = r#"#!/bin/sh
 # DALI: keep /etc/issue showing the machine's LAN IPv4 (handy for SSH).
+# NetworkManager passes $1=interface $2=action; only refresh when connectivity
+# is (re)gained, so a transient `down` doesn't blank the banner.
+case "$2" in
+    up|dhcp4-change|dhcp6-change|connectivity-change) ;;
+    *) exit 0 ;;
+esac
 ip=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p')
 printf '\nArch Linux (DALI)\nIPv4: %s\n\n' "${ip:-(pending)}" > /etc/issue
 "#;

@@ -158,8 +158,8 @@ fn step_status_toml(records: &[crate::report::StepRecord]) -> String {
     for record in records {
         let _ = writeln!(
             out,
-            "[[step]]\nindex = {}\nname = \"{}\"\ncompleted = {}\n",
-            record.index, record.name, record.completed
+            "[[step]]\nindex = {}\ntotal = {}\nname = \"{}\"\ncompleted = {}\n",
+            record.index, record.total, record.name, record.completed
         );
     }
     out
@@ -297,6 +297,7 @@ mod tests {
             },
         ]);
         assert!(toml.contains("name = \"Partition disk\""));
+        assert!(toml.contains("total = 2"));
         assert!(toml.contains("completed = true"));
         assert!(toml.contains("completed = false"));
     }
