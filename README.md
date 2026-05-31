@@ -69,6 +69,9 @@ More precisely, every install gets:
 - **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists` are
   enabled — on the live system before `pacstrap` (faster install) and in the
   target so it persists.
+- **Mirrors**: `reflector` ranks the mirrorlist by speed, filtered to the
+  timezone's country (worldwide fallback), before `pacstrap` — so both the
+  install and the installed system pull from fast mirrors. Best-effort.
 - **GnuPG keyservers**: `/etc/gnupg/dirmngr.conf` is set with several keyservers
   and a short connect timeout, so key imports (pacman-key and `paru`'s AUR
   builds) don't hang on a dead server.

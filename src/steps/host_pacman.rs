@@ -4,7 +4,7 @@
 
 use super::{Context, Step};
 use crate::error::Result;
-use crate::system::probe;
+use crate::system::{Command, probe};
 
 /// Tunes the host pacman config (and, later, refreshes mirrors) before install.
 pub struct HostPrep;
@@ -20,8 +20,40 @@ impl Step for HostPrep {
             ctx.sys
                 .write("/etc/pacman.conf", &tune_pacman_conf(&body))?;
         }
+        refresh_mirrors(ctx);
         Ok(())
     }
+}
+
+/// Rank mirrors with reflector: by the timezone's country and by speed, falling
+/// back to a worldwide ranking, then to the stock mirrorlist. Best-effort — a
+/// missing reflector or no network must never abort the install.
+fn refresh_mirrors(ctx: &mut Context<'_>) {
+    let country = probe::country_from_timezone(&ctx.config.timezone);
+    ctx.info("refreshing the mirrorlist (reflector)");
+    if ctx.sys.run(&reflector_cmd(country.as_deref())).is_err() {
+        let recovered = country.is_some() && ctx.sys.run(&reflector_cmd(None)).is_ok();
+        if !recovered {
+            ctx.info("reflector unavailable; keeping the existing mirrorlist");
+        }
+    }
+}
+
+/// `reflector` command ranking mirrors by speed over HTTPS, optionally filtered
+/// to `country`, saving over the live mirrorlist (pacstrap propagates it).
+fn reflector_cmd(country: Option<&str>) -> Command {
+    let mut cmd = Command::new("reflector");
+    if let Some(cc) = country {
+        cmd = cmd.arg("--country").arg(cc);
+    }
+    cmd.arg("--protocol")
+        .arg("https")
+        .arg("--latest")
+        .arg("20")
+        .arg("--sort")
+        .arg("rate")
+        .arg("--save")
+        .arg("/etc/pacman.d/mirrorlist")
 }
 
 /// Settings enabled under `[options]`: (key, desired line).
@@ -129,5 +161,41 @@ mod tests {
                 .iter()
                 .any(|a| a.contains("write: /etc/pacman.conf"))
         );
+    }
+
+    #[test]
+    fn reflector_cmd_filters_by_country_and_sorts_by_rate() {
+        assert_eq!(
+            reflector_cmd(Some("FR")).to_string(),
+            "reflector --country FR --protocol https --latest 20 --sort rate --save /etc/pacman.d/mirrorlist"
+        );
+    }
+
+    #[test]
+    fn reflector_cmd_without_country_is_worldwide() {
+        let cmd = reflector_cmd(None).to_string();
+        assert!(!cmd.contains("--country"));
+        assert!(cmd.contains("--sort rate"));
+    }
+
+    #[test]
+    fn dry_run_refreshes_mirrors_after_tuning() {
+        use crate::config::InstallConfig;
+        use crate::steps::test_support::{config, dry_actions};
+
+        let fr = InstallConfig {
+            timezone: "Europe/Paris".to_owned(),
+            ..config()
+        };
+        let actions = dry_actions(&HostPrep, &fr);
+        let tune = actions
+            .iter()
+            .position(|a| a.contains("write: /etc/pacman.conf"))
+            .expect("pacman.conf tuned");
+        let reflector = actions
+            .iter()
+            .position(|a| a.contains("reflector --country FR"))
+            .expect("reflector ran for FR");
+        assert!(tune < reflector, "mirrors refreshed after tuning");
     }
 }
