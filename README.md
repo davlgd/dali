@@ -66,6 +66,9 @@ More precisely, every install gets:
   warnings and never abort the (already bootable) install. (`pamac-aur` is
   intentionally not in the defaults — it currently needs an older `libalpm`
   than Arch ships; add it to `aur_packages` once it is compatible again.)
+- **GnuPG keyservers**: `/etc/gnupg/dirmngr.conf` is set with several keyservers
+  and a short connect timeout, so key imports (pacman-key and `paru`'s AUR
+  builds) don't hang on a dead server.
 - **Network carry-over**: the live ISO's NetworkManager/iwd profiles are copied
   into the target (mode `0600`), so a system installed over Wi-Fi reconnects
   after reboot without re-entering credentials. Best-effort.

@@ -3,7 +3,7 @@
 use super::{Context, Step};
 use crate::config::stack;
 use crate::error::Result;
-use crate::system::{Command, probe};
+use crate::system::{Command, probe, target_path};
 
 /// Runs `pacstrap` with the resolved package set.
 pub struct Pacstrap;
@@ -29,11 +29,56 @@ impl Step for Pacstrap {
             packages.len()
         ));
 
+        // Reliable keyservers on the live system before pacstrap initialises the
+        // keyring, then in the target so the installed system inherits them.
+        ctx.sys.mkdir_p("/etc/gnupg")?;
+        ctx.sys
+            .write("/etc/gnupg/dirmngr.conf", stack::DIRMNGR_CONF)?;
+
         // `-K` initialises a fresh pacman keyring inside the new root.
         let command = Command::new("pacstrap")
             .arg("-K")
             .arg(stack::TARGET_MOUNT)
             .args(packages);
-        ctx.sys.run(&command)
+        ctx.sys.run(&command)?;
+
+        ctx.sys.mkdir_p(&target_path("/etc/gnupg"))?;
+        ctx.sys
+            .write(&target_path("/etc/gnupg/dirmngr.conf"), stack::DIRMNGR_CONF)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steps::test_support::{config, dry_actions};
+
+    #[test]
+    fn dirmngr_conf_written_on_host_before_pacstrap_and_in_target_after() {
+        let actions = dry_actions(&Pacstrap, &config());
+        // The host write has no `/mnt` prefix; the target one does.
+        let host = actions
+            .iter()
+            .position(|a| a.contains("write: /etc/gnupg/dirmngr.conf"))
+            .expect("host dirmngr.conf write");
+        let pacstrap = actions
+            .iter()
+            .position(|a| a.contains("pacstrap"))
+            .expect("pacstrap run");
+        let target = actions
+            .iter()
+            .position(|a| a.contains("/mnt/etc/gnupg/dirmngr.conf"))
+            .expect("target dirmngr.conf write");
+        assert!(host < pacstrap, "host dirmngr.conf must precede pacstrap");
+        assert!(
+            pacstrap < target,
+            "target dirmngr.conf must follow pacstrap"
+        );
+    }
+
+    #[test]
+    fn dirmngr_conf_lists_keyservers_and_timeout() {
+        assert!(stack::DIRMNGR_CONF.contains("hkps://"));
+        assert!(stack::DIRMNGR_CONF.contains("connect-quick-timeout 4"));
     }
 }

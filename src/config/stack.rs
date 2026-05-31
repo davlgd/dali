@@ -77,3 +77,11 @@ pub const MISE_GLOBAL_TOOLS: &[&str] = &["bun", "codex", "gemini", "node", "open
 /// `kernel-modules-hook` keeps the running kernel's modules across an upgrade,
 /// so `modprobe` still works before the next reboot.
 pub const DEFAULT_AUR_PACKAGES: &[&str] = &["kernel-modules-hook"];
+/// GnuPG dirmngr config: several keyservers and a short connect timeout, so key
+/// imports (pacman-key, and `paru`'s AUR builds) don't hang on a dead server.
+pub const DIRMNGR_CONF: &str = "\
+keyserver hkps://keys.openpgp.org
+keyserver hkps://keyserver.ubuntu.com
+keyserver hkps://pgp.mit.edu
+connect-quick-timeout 4
+";
