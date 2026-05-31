@@ -32,6 +32,14 @@ impl Step for Tuning {
         ctx.sys.write(
             &target_path("/etc/systemd/user.conf.d/90-dali-nofile.conf"),
             NOFILE_LIMITS,
+        )?;
+
+        // Probe path MTU so SSH/large transfers don't stall behind a broken
+        // PMTUD (common on VPNs and some networks).
+        ctx.info("enabling net.ipv4.tcp_mtu_probing");
+        ctx.sys.write(
+            &target_path("/etc/sysctl.d/90-dali-tcp-mtu-probing.conf"),
+            MTU_PROBING_CONF,
         )
     }
 }
@@ -40,6 +48,8 @@ impl Step for Tuning {
 const INOTIFY_CONF: &str = "fs.inotify.max_user_watches = 524288\n";
 /// systemd file-descriptor limit (soft:hard) for system and user managers.
 const NOFILE_LIMITS: &str = "[Manager]\nDefaultLimitNOFILE=65536:524288\n";
+/// Enable TCP path-MTU probing, working around broken PMTUD.
+const MTU_PROBING_CONF: &str = "net.ipv4.tcp_mtu_probing = 1\n";
 
 #[cfg(test)]
 mod tests {
@@ -79,5 +89,20 @@ mod tests {
     #[test]
     fn nofile_limit_value() {
         assert!(NOFILE_LIMITS.contains("DefaultLimitNOFILE=65536:524288"));
+    }
+
+    #[test]
+    fn tcp_mtu_probing_sysctl_is_written() {
+        let actions = dry_actions(&Tuning, &config());
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/etc/sysctl.d/90-dali-tcp-mtu-probing.conf"))
+        );
+    }
+
+    #[test]
+    fn mtu_probing_value() {
+        assert!(MTU_PROBING_CONF.contains("net.ipv4.tcp_mtu_probing = 1"));
     }
 }

@@ -66,7 +66,8 @@ More precisely, every install gets:
   `aur_packages` once it is compatible again.)
 - **System tuning** (always applied): `fs.inotify.max_user_watches = 524288`
   (a dev box exhausts the default almost immediately) and a systemd
-  `DefaultLimitNOFILE=65536:524288` bump (system + user managers).
+  `DefaultLimitNOFILE=65536:524288` bump (system + user managers), and
+  `net.ipv4.tcp_mtu_probing = 1` (robust SSH/transfers behind broken PMTUD).
 - **ESP**: FAT32, 1 GiB, mounted at `/boot`.
 - **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.
