@@ -89,14 +89,26 @@ impl Step for Provision {
             );
         }
 
-        // Revoke the passwordless sudo grant.
-        ctx.sys.run(
+        // Revoke the temporary passwordless-sudo grant. Best-effort so a
+        // transient `rm` failure doesn't abort an otherwise-complete install…
+        best_effort(
+            ctx,
+            "revoking the provisioning sudo grant",
             &Command::new("rm")
                 .arg("-f")
                 .arg(NOPASSWD_DROPIN)
                 .in_chroot(),
-        )?;
-        Ok(())
+        );
+        // …but then hard-fail if the drop-in somehow survived: leaving it would
+        // be a wheel-wide passwordless-root backdoor. `test ! -e` exits non-zero
+        // (→ error) when the file still exists.
+        ctx.sys.run(
+            &Command::new("test")
+                .arg("!")
+                .arg("-e")
+                .arg(NOPASSWD_DROPIN)
+                .in_chroot(),
+        )
     }
 }
 
