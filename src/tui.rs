@@ -403,7 +403,7 @@ impl Wizard {
                 }
             }
             KeyCode::Enter => {
-                let typed = self.confirm.clone().unwrap_or_default();
+                let typed = self.confirm.as_deref().unwrap_or_default();
                 if self.confirm_accepts(typed.trim()) {
                     return self.pending.take();
                 }
@@ -727,7 +727,7 @@ impl Wizard {
         };
         let github = self.text(GITHUB);
         let github = github.trim();
-        let typed = self.confirm.clone().unwrap_or_default();
+        let typed = self.confirm.as_deref().unwrap_or_default();
 
         let mut lines = vec![
             Line::from(Span::styled(
@@ -917,6 +917,34 @@ mod tests {
         w.handle_picker_key(KeyCode::Esc);
         assert!(w.picker.is_none());
         assert_eq!(w.text(0), "en_US.UTF-8", "Esc cancels without changing");
+    }
+
+    #[test]
+    fn picker_navigates_a_long_list_within_bounds() {
+        let options: Vec<String> = (0..30).map(|i| format!("tz{i:02}")).collect();
+        let mut w = Wizard {
+            fields: vec![
+                Field::choice("Timezone", "", options, "tz00"),
+                Field::text("x", "", String::new()),
+            ],
+            selected: 0,
+            error: None,
+            confirm: None,
+            pending: None,
+            picker: None,
+        };
+        w.open_picker(None);
+        for _ in 0..15 {
+            w.handle_picker_key(KeyCode::Down);
+        }
+        assert_eq!(w.picker.as_ref().unwrap().cursor, 15);
+        // Down never runs off the end.
+        for _ in 0..100 {
+            w.handle_picker_key(KeyCode::Down);
+        }
+        assert_eq!(w.picker.as_ref().unwrap().cursor, 29);
+        w.handle_picker_key(KeyCode::Enter);
+        assert_eq!(w.text(0), "tz29");
     }
 
     #[test]

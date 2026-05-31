@@ -24,7 +24,7 @@ pub(super) fn validate_github_user(name: &str) -> Result<()> {
 }
 
 /// Package names: non-empty, and limited to pacman's allowed characters so a
-/// stray token cannot only blow up mid-`pacstrap` after the disk is wiped.
+/// stray token cannot blow up mid-`pacstrap` after the disk is wiped.
 pub(super) fn validate_package_name(name: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name
