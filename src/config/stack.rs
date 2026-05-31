@@ -60,6 +60,7 @@ pub const DEFAULT_APPS: &[&str] = &[
     "minio-client",
     "nano",
     "openssh",
+    "ufw",
     "uv",
     "whois",
     "yt-dlp",

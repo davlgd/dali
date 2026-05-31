@@ -9,6 +9,7 @@
 mod base;
 mod bootloader;
 mod fstab;
+mod hardening;
 mod host_pacman;
 mod initramfs;
 mod localization;
@@ -87,6 +88,7 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
         Box::new(services::Services),
         Box::new(snapshots::Snapshots),
         Box::new(tuning::Tuning),
+        Box::new(hardening::Harden),
         Box::new(provision::Provision),
     ]
 }
@@ -258,6 +260,7 @@ mod tests {
                 "Enable services",
                 "Configure snapshots (snapper)",
                 "Apply system tuning",
+                "Harden the system (sshd, firewall)",
                 "Provision extras (V, mise, Claude Code)",
             ]
         );

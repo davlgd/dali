@@ -134,9 +134,9 @@ filter, arrow-select) — no need to remember exact identifiers.
 - **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
   `bash-completion`, `bash-preexec`, `bat`, `docker`, `docker-buildx`,
   `fastfetch`, `ffmpeg`, `glab`, `htop`, `impala`, `jless`, `jq`, `lazydocker`,
-  `lazygit`, `less`, `minio-client`, `nano`, `openssh`, `uv`, `whois`, `yt-dlp`,
-  `zellij` — with `docker.service`, `avahi-daemon.service` and `sshd.service`
-  enabled and the user added to the `docker` group.
+  `lazygit`, `less`, `minio-client`, `nano`, `openssh`, `ufw`, `uv`, `whois`,
+  `yt-dlp`, `zellij` — with `docker.service`, `avahi-daemon.service` and
+  `sshd.service` enabled and the user added to the `docker` group.
 - **Base services**: `NetworkManager`, `systemd-timesyncd`,
   `systemd-boot-update`, `fstrim.timer`.
 
@@ -185,6 +185,9 @@ filter, arrow-select) — no need to remember exact identifiers.
 
 - **System tuning**: `fs.inotify.max_user_watches = 524288`, a systemd
   `DefaultLimitNOFILE = 65536:524288` bump, and `net.ipv4.tcp_mtu_probing = 1`.
+- **Hardening** (with the app set): an sshd drop-in disables root SSH and caps
+  auth tries, and `ufw` is configured on first boot (deny incoming, allow
+  outgoing, keep SSH reachable).
 - **Login banner**: a NetworkManager dispatcher keeps `/etc/issue` showing the
   machine's LAN IPv4 at the console login prompt — so you can see where to SSH
   in (the egress address, never the `docker0` bridge).
