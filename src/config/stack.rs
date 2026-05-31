@@ -49,6 +49,7 @@ pub const DEFAULT_APPS: &[&str] = &[
     "fastfetch",
     "ffmpeg",
     "glab",
+    "htop",
     "impala",
     "jless",
     "jq",

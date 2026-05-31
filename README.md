@@ -37,8 +37,9 @@ More precisely, every install gets:
   `zram-generator` when zram is on, and any extras you list.
 - **Default app set** (`default_apps`, on by default): `atuin`, `avahi`,
   `bash-completion`, `bat`, `docker`, `docker-buildx`, `fastfetch`, `ffmpeg`,
-  `glab`, `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`, `minio-client`,
-  `nano`, `openssh`, `uv`, `whois`, `yt-dlp`, `zellij` — with `docker.service`,
+  `glab`, `htop`, `impala`, `jless`, `jq`, `lazydocker`, `lazygit`, `less`,
+  `minio-client`, `nano`, `openssh`, `uv`, `whois`, `yt-dlp`, `zellij` — with
+  `docker.service`,
   `avahi-daemon.service` and `sshd.service` enabled and the user added to the
   `docker` group.
 - **SSH keys** (optional, `github_user`): when set, that GitHub account's public
@@ -174,7 +175,7 @@ timezone = "Europe/Paris"
 locale = "en_US.UTF-8"
 keymap = "fr"
 root_password = ""
-extra_packages = ["htop"]
+extra_packages = ["neovim"]
 zram_swap = true
 
 # The [user] table must come last (TOML forbids bare keys after a table).
