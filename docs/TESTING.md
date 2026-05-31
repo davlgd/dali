@@ -6,7 +6,10 @@ DALI is tested at three levels, from fast to thorough.
 
 In-module `#[cfg(test)]` tests cover config validation, the package set, the
 `Secret` redaction, command/chroot construction, partition-path derivation,
-disk probing, the bootloader entry, and the TUI helpers.
+disk probing, the bootloader entry, the TUI helpers, the sshd/firewall
+hardening (including a lockout-safety check that the firewall keeps SSH open),
+the iwd→NetworkManager profile conversion and SSID decoding, and the
+`DEFAULT_APPS`/`APP_SERVICES` drift guard.
 
 ```sh
 cargo test
@@ -62,7 +65,12 @@ Expect it to take several minutes (the VM downloads packages via `pacstrap`).
    observable) and power off.
 3. **Phase 2 (boot)** — boot the now-installed disk under OVMF (no ISO) and
    assert it reaches a `<hostname> login:` prompt — proving systemd-boot, the
-   kernel, the initramfs and the root subvolume all work together.
+   kernel, the initramfs and the root subvolume all work together. When the
+   config sets a `root_password`, it then logs in as root and asserts DALI's
+   artifacts are present: the snapper config, the NetworkManager issue
+   dispatcher, the install/step logs, `/etc/os-release` (`ID=arch` + `DALI_*`),
+   `/etc/dali-release`, the bash-preexec/atuin wiring, the sshd hardening
+   drop-in and the `dali-firewall` script. (Skipped if no `root_password`.)
 
 Logs for each phase are written to the `--work` directory (`phase1.log`,
 `phase2.log`).

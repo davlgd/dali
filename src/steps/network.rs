@@ -36,17 +36,15 @@ impl Step for CarryNetwork {
         }
 
         let dir = probe::NM_CONNECTIONS_DIR;
+        let target_dir = target_path(dir);
         ctx.info(format!("installing {} network profile(s)", profiles.len()));
-        ctx.sys.mkdir_p(&target_path(dir))?;
-        for (name, contents) in &profiles {
-            ctx.sys
-                .write(&format!("{}/{name}", target_path(dir)), contents)?;
-        }
-        // Per-dir 0700, per-file 0600 (not `chmod -R 600`, which would strip the
-        // directory's execute bit). Paths are chroot-relative.
+        ctx.sys.mkdir_p(&target_dir)?;
+        // Lock the directory to 0700 *before* writing secrets into it, so the
+        // keyfiles are never reachable by other users (paths are chroot-relative).
         ctx.sys
             .run(&Command::new("chmod").arg("700").arg(dir).in_chroot())?;
-        for (name, _) in &profiles {
+        for (name, contents) in &profiles {
+            ctx.sys.write(&format!("{target_dir}/{name}"), contents)?;
             ctx.sys.run(
                 &Command::new("chmod")
                     .arg("600")
@@ -105,6 +103,15 @@ fn iwd_to_nm(filename: &str, contents: &str) -> Option<(String, String)> {
     let (stem, kind) = filename.rsplit_once('.')?;
     let ssid = decode_iwd_ssid(stem);
 
+    // The decoded SSID is attacker-advertised and becomes both an on-disk
+    // filename and keyfile values. Reject anything that could escape the
+    // directory (`/`) or break the keyfile grammar / inject lines (control
+    // characters such as newline); iwd stores those bytes escaped, so a normal
+    // SSID is unaffected.
+    if ssid.is_empty() || ssid.contains('/') || ssid.chars().any(char::is_control) {
+        return None;
+    }
+
     let security = match kind {
         "psk" => {
             let psk = iwd_value(contents, "Passphrase")
@@ -123,35 +130,32 @@ fn iwd_to_nm(filename: &str, contents: &str) -> Option<(String, String)> {
     Some((format!("{ssid}.nmconnection"), nm))
 }
 
-/// The value of an `key=value` line anywhere in an iwd profile.
+/// The value of a `key = value` line anywhere in an iwd profile (whitespace
+/// around `=` tolerated).
 fn iwd_value(contents: &str, key: &str) -> Option<String> {
     contents.lines().find_map(|line| {
-        line.trim()
-            .strip_prefix(key)?
-            .strip_prefix('=')
-            .map(|value| value.trim().to_owned())
+        let (k, value) = line.split_once('=')?;
+        (k.trim() == key).then(|| value.trim().to_owned())
     })
 }
 
-/// Decode iwd's filename encoding for an SSID: bytes outside its safe set are
-/// stored as `=XX` (hex). Safe bytes pass through unchanged.
+/// Decode iwd's filename encoding for an SSID. iwd stores an SSID verbatim when
+/// it contains only `[A-Za-z0-9_ -]`; otherwise the *whole* SSID byte string is
+/// hex-encoded as a single leading `=` followed by one contiguous lowercase-hex
+/// run. A leading `=` is an unambiguous discriminator (it is never in the
+/// verbatim set). Malformed input is passed through rather than turned to garbage.
 fn decode_iwd_ssid(stem: &str) -> String {
-    let bytes = stem.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'='
-            && i + 2 < bytes.len()
-            && let Ok(byte) = u8::from_str_radix(&stem[i + 1..i + 3], 16)
-        {
-            out.push(byte);
-            i += 3;
-        } else {
-            out.push(bytes[i]);
-            i += 1;
-        }
+    let Some(hex) = stem.strip_prefix('=') else {
+        return stem.to_owned();
+    };
+    if hex.len() % 2 != 0 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return stem.to_owned();
     }
-    String::from_utf8_lossy(&out).into_owned()
+    let bytes: Vec<u8> = (0..hex.len())
+        .step_by(2)
+        .filter_map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+        .collect();
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 #[cfg(test)]
@@ -208,8 +212,22 @@ mod tests {
     }
 
     #[test]
-    fn decodes_hex_encoded_ssid_names() {
-        assert_eq!(decode_iwd_ssid("My=20Wifi"), "My Wifi");
+    fn decodes_iwd_ssid_names() {
+        // Safe-set SSIDs (incl. spaces) are stored verbatim; anything else is
+        // the whole SSID hex-encoded behind a single leading `=`.
         assert_eq!(decode_iwd_ssid("PlainSSID"), "PlainSSID");
+        assert_eq!(decode_iwd_ssid("My Wifi"), "My Wifi");
+        assert_eq!(decode_iwd_ssid("=436166c3a9"), "Café");
+        assert_eq!(decode_iwd_ssid("=612162"), "a!b");
+        // Malformed (not hex / odd length / multibyte) passes through, no panic.
+        assert_eq!(decode_iwd_ssid("=€x"), "=€x");
+    }
+
+    #[test]
+    fn rejects_path_and_control_ssids() {
+        // iwd stores `/` as `=2f` and a newline as `=0a`; both must be refused
+        // rather than steer the write path or inject keyfile lines.
+        assert!(iwd_to_nm("=2f.open", "").is_none());
+        assert!(iwd_to_nm("=0a.psk", "[Security]\nPassphrase=x\n").is_none());
     }
 }

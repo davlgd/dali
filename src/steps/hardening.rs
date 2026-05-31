@@ -64,6 +64,9 @@ const FIREWALL_SCRIPT: &str = "/usr/local/bin/dali-firewall";
 /// enable it, then disable this one-shot so it never runs again.
 const FIREWALL_SETUP: &str = r"#!/bin/sh
 # DALI: configure the firewall on first boot, where ufw's backend works.
+# `set -e` so a failed step leaves the one-shot enabled to retry next boot
+# rather than self-disabling with the firewall unconfigured.
+set -e
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow ssh
@@ -122,5 +125,7 @@ mod tests {
         // The firewall must allow SSH, or enabling deny-incoming locks us out.
         assert!(FIREWALL_SETUP.contains("ufw allow ssh"));
         assert!(FIREWALL_SETUP.contains("deny incoming"));
+        // `set -e` so a failed run retries instead of self-disabling.
+        assert!(FIREWALL_SETUP.contains("set -e"));
     }
 }
