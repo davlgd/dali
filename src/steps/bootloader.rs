@@ -74,7 +74,7 @@ fn entry(root_uuid: &str, microcode: Option<&str>) -> String {
          linux   /vmlinuz-{kernel}\n\
          {ucode_initrd}\
          initrd  /initramfs-{kernel}.img\n\
-         options root=UUID={root_uuid} rootflags=subvol={root_subvol} rw\n"
+         options root=UUID={root_uuid} rootfstype=btrfs rootflags=subvol={root_subvol} rw\n"
     )
 }
 
@@ -89,6 +89,11 @@ mod tests {
         assert!(text.contains("rootflags=subvol=@"));
         assert!(text.contains("/vmlinuz-linux"));
         assert!(text.contains("/initramfs-linux.img"));
+    }
+
+    #[test]
+    fn entry_pins_btrfs_rootfstype() {
+        assert!(entry("uuid", None).contains("rootfstype=btrfs"));
     }
 
     #[test]
