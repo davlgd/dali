@@ -4,6 +4,32 @@ All notable changes to DALI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-01
+
+### Added
+
+- A `[provision]` config table makes the post-install steps individually
+  optional: `enabled` (master switch), `v` (build the V compiler) and `tools`
+  (`mise` with its global tool set plus Claude Code).
+- A `[shell]` config table with `aliases`, to skip the DALI alias/helper block
+  in `~/.bashrc` (the `PATH` addition is kept regardless).
+- `dns_servers`: the resolvers used inside the chroot are now configurable
+  (still defaulting to Quad9 + Cloudflare); an empty list keeps whatever
+  `pacstrap` copied. Values are validated as IP addresses.
+- `ssh_password_auth`: when set it is honored; when unset DALI disables sshd
+  password authentication if SSH keys are imported (a non-empty `github_user`)
+  and keeps it otherwise, so a keyless host is never locked out.
+- `mirror_country`: restrict `reflector`'s mirror ranking to a country (name or
+  code, comma-separated for several).
+
+### Changed
+
+- A real install now fails up front, before any disk is touched, when the
+  network is unreachable — instead of only warning and stalling partway through
+  `pacstrap`.
+- Mirrors are ranked by speed worldwide by default; the country is taken from
+  `mirror_country` rather than being implicitly derived from the timezone.
+
 ## [0.3.0] - 2026-06-01
 
 ### Added
