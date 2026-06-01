@@ -23,9 +23,11 @@ DALI installs exactly one well-trodden configuration:
 | Swap        | zram (zstd, sized to RAM, capped at 8 GiB) — optional         |
 | Admin       | a sudo-enabled user in the `wheel` group; root locked by default |
 
-The only things you choose are the **disk**, **hostname**, **username +
-password**, optional **root password**, **locale**, **keymap**, **timezone**,
-the zram toggle and any **extra packages**. Everything else is fixed by the
+The core choices are the **disk**, **hostname**, **username + password**,
+optional **root password**, **locale**, **keymap**, **timezone**, the zram
+toggle and any **extra packages** — plus a handful of optional knobs (SSH-key
+import, the provisioning/shell toggles, DNS and mirror country) covered in
+[Configuration file](#configuration-file). Everything else is fixed by the
 stack above — see [What every install sets up](#what-every-install-sets-up).
 
 ## Requirements
@@ -33,8 +35,10 @@ stack above — see [What every install sets up](#what-every-install-sets-up).
 DALI runs from an Arch-based live environment **booted in UEFI mode**, as
 **root** — the [Arch Linux live ISO](https://archlinux.org/download/) or
 [SystemRescue](https://www.system-rescue.org/Download/). A real install refuses
-to proceed otherwise. (On any other Linux box you can still rehearse the whole
-plan with `--dry-run`, which changes nothing — see [Usage](#usage).)
+to proceed otherwise, and also fails fast — before touching the disk — if the
+network is unreachable, since `pacstrap` and provisioning need it. (On any other
+Linux box you can still rehearse the whole plan with `--dry-run`, which changes
+nothing — see [Usage](#usage).)
 
 ## Install
 
@@ -65,7 +69,8 @@ Verify it against the published `SHA256SUMS` if you like. A glibc build
 When a real install finishes, DALI **reboots into the new system by default**
 (immediately with `--yes`, after a confirmation otherwise); pass `--no-reboot`
 to stay on the live environment. Set `default_apps = false` for a bare bootable
-system, or `provision = false` to skip the post-install tooling step.
+system, or disable individual post-install steps through the `[provision]` and
+`[shell]` config tables (see below).
 
 ### Flags
 
@@ -108,10 +113,33 @@ timezone = "Europe/Paris"
 locale = "en_US.UTF-8"
 keymap = "fr"
 root_password = ""
+github_user = "davlgd"
+# sshd password auth. Omit to auto-decide (off when github_user keys are
+# imported, on otherwise); set explicitly to force it.
+# ssh_password_auth = false
 extra_packages = ["neovim"]
 zram_swap = true
+default_apps = true
+# Resolvers used inside the chroot; defaults to Quad9 + Cloudflare, [] keeps
+# whatever pacstrap copied.
+dns_servers = ["9.9.9.9", "1.1.1.1"]
+# Restrict reflector's mirror ranking to a country; empty ranks worldwide.
+# mirror_country = "France"
+# custom_commands run as your user at the end of provisioning:
+# custom_commands = ["git config --global pull.rebase true"]
 
-# The [user] table must come last (TOML forbids bare keys after a table).
+# Post-install provisioning (best-effort). Omit a key to keep it on; set
+# enabled = false to skip provisioning entirely.
+[provision]
+enabled = true
+v = true      # build the V compiler from source
+tools = true  # mise + its global tool set + Claude Code (AI/dev CLIs)
+
+[shell]
+aliases = true  # write the DALI alias/helper block into ~/.bashrc
+
+# Tables come after the bare keys (TOML forbids bare keys after a table); the
+# [user] table is kept last.
 [user]
 username = "david"
 password = "changeme"
@@ -125,10 +153,13 @@ password = "changeme"
   `0600`) holding only the secrets. `--config foo.toml` later merges the sidecar
   back in automatically; a single file with inline passwords also works.
 
-The interactive TUI gathers every one of these fields and re-asks each password
-for confirmation. Locale, keymap and timezone are **picked from a filterable
-list** of what the system actually supports (press Enter on the field, type to
-filter, arrow-select) — no need to remember exact identifiers.
+The interactive TUI gathers the disk, hostname, identity, root state,
+locale/keymap/timezone, the zram toggle, extra packages and the optional GitHub
+user, re-asking each password for confirmation. Locale, keymap and timezone are
+**picked from a filterable list** of what the system actually supports (press
+Enter on the field, type to filter, arrow-select) — no need to remember exact
+identifiers. The `[provision]` / `[shell]` tables and the `dns_servers`,
+`mirror_country` and `ssh_password_auth` knobs are configuration-file only.
 
 ## What every install sets up
 
@@ -163,22 +194,25 @@ filter, arrow-select) — no need to remember exact identifiers.
   (`add`/`list`/`remove`/`search` for pacman, `gac`/`gl`/`gst`/`gsw`/…, `dps`,
   `myip`, `pgen`). `up` updates the system, mise tools, global bun/uv packages
   and the V compiler in one go. The block is marker-delimited, so re-running
-  replaces it in place (with a one-time `~/.bashrc.dali.bak` backup).
-- **Provisioning** (`provision`, on by default, best-effort): builds the
-  [V compiler](https://vlang.io) into `~/.local/bin`, runs the
-  [`mise`](https://mise.jdx.dev) and [Claude Code](https://claude.com/claude-code)
-  installers, and installs `bun`, `codex`, `gemini`, `node`, `opencode` and `pi`
-  globally via `mise`. Any `custom_commands` you list run as your user at the end
-  of this step. Network-bound; failures are warnings, never aborting the
-  (already bootable) install.
+  replaces it in place (with a one-time `~/.bashrc.dali.bak` backup). Skip it
+  with `[shell] aliases = false` — the `PATH` entry is kept regardless.
+- **Provisioning** (`[provision]`, on by default, best-effort): `provision.v`
+  builds the [V compiler](https://vlang.io) into `~/.local/bin`, and
+  `provision.tools` runs the [`mise`](https://mise.jdx.dev) and
+  [Claude Code](https://claude.com/claude-code) installers and installs `bun`,
+  `codex`, `gemini`, `node`, `opencode` and `pi` globally via `mise`. Any
+  `custom_commands` you list run as your user at the end of this step. Set
+  `provision.enabled = false` to skip it all. Network-bound; failures are
+  warnings, never aborting the (already bootable) install.
 - **SSH keys** (optional, `github_user`): that GitHub account's public keys
   (`https://github.com/<user>.keys`) are imported into `~/.ssh/authorized_keys`.
 
 ### Networking & mirrors
 
-- **Mirrors**: `reflector` ranks the mirrorlist by speed, filtered to the
-  timezone's country (worldwide fallback), before `pacstrap` — so both the
-  install and the installed system pull from fast mirrors.
+- **Mirrors**: `reflector` ranks the mirrorlist by speed before `pacstrap` — so
+  both the install and the installed system pull from fast mirrors. The ranking
+  is worldwide by default, or restricted to `mirror_country` (a country name or
+  code) when you set it.
 - **pacman tuning**: `Color`, `ParallelDownloads = 5` and `VerbosePkgLists`,
   applied to the live system (faster install) and the target.
 - **Network carry-over**: the live environment's connections are carried into
@@ -195,7 +229,9 @@ filter, arrow-select) — no need to remember exact identifiers.
 - **System tuning**: `fs.inotify.max_user_watches = 524288`, a systemd
   `DefaultLimitNOFILE = 65536:524288` bump, and `net.ipv4.tcp_mtu_probing = 1`.
 - **Hardening** (with the app set): an sshd drop-in disables root SSH and caps
-  auth tries, and `ufw` is configured on first boot (deny incoming, allow
+  auth tries; password authentication follows `ssh_password_auth` (when unset,
+  it is disabled if SSH keys were imported and kept otherwise, so a keyless box
+  is never locked out). `ufw` is configured on first boot (deny incoming, allow
   outgoing, keep SSH reachable).
 - **Login banner**: a NetworkManager dispatcher keeps `/etc/issue` showing the
   machine's LAN IPv4 at the console login prompt — so you can see where to SSH
@@ -210,7 +246,9 @@ filter, arrow-select) — no need to remember exact identifiers.
 
 Omitted config fields default to `hostname=arch`, `timezone=UTC`,
 `locale=en_US.UTF-8`, `keymap=us`, `zram_swap=true`, `default_apps=true`,
-`provision=true`, and a **locked** root (empty `root_password`).
+provisioning and shell aliases on (`[provision]`/`[shell]` all `true`),
+`dns_servers` = Quad9 + Cloudflare, a worldwide mirror ranking, and a **locked**
+root (empty `root_password`).
 
 ## Building
 
