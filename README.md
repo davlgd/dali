@@ -154,12 +154,14 @@ password = "changeme"
   back in automatically; a single file with inline passwords also works.
 
 The interactive TUI gathers the disk, hostname, identity, root state,
-locale/keymap/timezone, the zram toggle, extra packages and the optional GitHub
-user, re-asking each password for confirmation. Locale, keymap and timezone are
-**picked from a filterable list** of what the system actually supports (press
-Enter on the field, type to filter, arrow-select) — no need to remember exact
-identifiers. The `[provision]` / `[shell]` tables and the `dns_servers`,
-`mirror_country` and `ssh_password_auth` knobs are configuration-file only.
+locale/keymap/timezone, the mirror country, the zram and **Dev/AI tools**
+toggles, extra packages and the optional GitHub user, re-asking each password
+for confirmation. Locale, keymap, timezone and the mirror country are **picked
+from a filterable list** of what the system actually supports (press Enter on
+the field, type to filter, arrow-select) — no need to remember exact
+identifiers. The remaining knobs — `[shell].aliases`, the finer
+`provision.v`/`provision.tools` sub-toggles, `dns_servers` and
+`ssh_password_auth` — are configuration-file only.
 
 ## What every install sets up
 
