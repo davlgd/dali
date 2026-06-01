@@ -46,10 +46,12 @@ pub struct ProvisionSettings {
 
 impl Default for ProvisionSettings {
     fn default() -> Self {
+        // Route through `yes()` so the "default on" value has a single source,
+        // shared with the per-field `#[serde(default = "yes")]` below.
         Self {
-            enabled: true,
-            v: true,
-            tools: true,
+            enabled: yes(),
+            v: yes(),
+            tools: yes(),
         }
     }
 }
