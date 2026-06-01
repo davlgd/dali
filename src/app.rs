@@ -50,13 +50,18 @@ pub fn run(cli: &Cli) -> Result<()> {
         pre_wipe_checks(&config)?;
     }
 
-    // Probe the network once: warn (single place) and surface it in the summary.
-    let online = cli.dry_run || probe::has_network();
-    if !online {
-        eprintln!("warning: no network detected — package installation will likely fail");
+    // A real install needs the network for pacstrap and provisioning. Fail now,
+    // before any disk is touched, rather than stalling partway through pacstrap.
+    // A dry-run is rehearsable offline, so it is exempt.
+    if !cli.dry_run && !probe::has_network() {
+        return Err(Error::Environment(
+            "no network connectivity (could not reach archlinux.org) — \
+             connect to a network and retry"
+                .into(),
+        ));
     }
 
-    if !cli.dry_run && !cli.yes && !confirm(&config, online, cli.config.as_deref())? {
+    if !cli.dry_run && !cli.yes && !confirm(&config, cli.config.as_deref())? {
         return Err(Error::Aborted);
     }
 
@@ -278,9 +283,9 @@ fn save_config(config: &InstallConfig, path: &Path) -> Result<()> {
 /// and extra packages — but never the passwords themselves, so the user gives
 /// informed consent before the disk is erased. (SSH key import is listed in the
 /// interactive TUI summary rather than here.)
-fn confirm(config: &InstallConfig, online: bool, source: Option<&Path>) -> Result<bool> {
+fn confirm(config: &InstallConfig, source: Option<&Path>) -> Result<bool> {
     println!();
-    for line in confirm_summary(config, online, source) {
+    for line in confirm_summary(config, source) {
         println!("{line}");
     }
     print!("\nType 'yes' to continue: ");
@@ -294,9 +299,9 @@ fn confirm(config: &InstallConfig, online: bool, source: Option<&Path>) -> Resul
 }
 
 /// The lines of the pre-install summary (everything but the typed prompt). The
-/// `config`/`extras` lines appear only when relevant, and the network warning
-/// only when offline.
-fn confirm_summary(config: &InstallConfig, online: bool, source: Option<&Path>) -> Vec<String> {
+/// `config`/`extras` lines appear only when relevant. (Network is already a hard
+/// precondition by this point, so it needs no line here.)
+fn confirm_summary(config: &InstallConfig, source: Option<&Path>) -> Vec<String> {
     let mut lines = vec![format!(
         "About to ERASE {} and install Arch Linux:",
         config.disk
@@ -323,9 +328,6 @@ fn confirm_summary(config: &InstallConfig, online: bool, source: Option<&Path>) 
     ));
     if !config.extra_packages.is_empty() {
         lines.push(format!("  extras   : {}", config.extra_packages.join(", ")));
-    }
-    if !online {
-        lines.push("  network  : NOT DETECTED — package installation will fail partway".to_owned());
     }
     lines
 }
@@ -358,14 +360,13 @@ mod tests {
             disk: "/dev/vda".to_owned(),
             ..InstallConfig::default()
         };
-        let joined = confirm_summary(&config, true, None).join("\n");
+        let joined = confirm_summary(&config, None).join("\n");
         assert!(joined.contains("About to ERASE /dev/vda"));
         assert!(joined.contains("root     : locked"));
         assert!(joined.contains("zram swap: on"));
-        // Optional lines are absent on the default, online path.
+        // Optional lines are absent on the default path.
         assert!(!joined.contains("config   :"));
         assert!(!joined.contains("extras   :"));
-        assert!(!joined.contains("network  :"));
     }
 
     #[test]
@@ -377,10 +378,9 @@ mod tests {
             ..InstallConfig::default()
         };
         let path = std::path::PathBuf::from("/tmp/cfg.toml");
-        let joined = confirm_summary(&config, false, Some(&path)).join("\n");
+        let joined = confirm_summary(&config, Some(&path)).join("\n");
         assert!(joined.contains("config   : /tmp/cfg.toml"));
         assert!(joined.contains("root     : password set"));
         assert!(joined.contains("extras   : htop, git"));
-        assert!(joined.contains("network  : NOT DETECTED"));
     }
 }
