@@ -207,25 +207,25 @@ impl Wizard {
         );
 
         // Mirror country is list-backed when tzdata exposes the country table
-        // (the Arch ISO); free text otherwise. A leading "worldwide" option maps
-        // back to an empty mirror_country (rank the fastest mirrors globally).
-        let mirror = match probe::list_countries() {
-            countries if !countries.is_empty() => {
+        // (the Arch ISO), free text otherwise — via the shared `list_field`
+        // helper. A leading "worldwide" option maps back to an empty
+        // mirror_country (rank the fastest mirrors globally).
+        let mirror = {
+            let countries = probe::list_countries();
+            let options = if countries.is_empty() {
+                Vec::new()
+            } else {
                 let mut options = Vec::with_capacity(countries.len() + 1);
                 options.push(WORLDWIDE.to_owned());
                 options.extend(countries);
-                Field::choice(
-                    "Mirror country",
-                    "Enter to pick — worldwide ranks the fastest globally",
-                    options,
-                    &initial.mirror_country,
-                )
-            }
-            _ => Field::text(
+                options
+            };
+            list_field(
                 "Mirror country",
-                "optional — country name/code, empty = worldwide",
-                initial.mirror_country.clone(),
-            ),
+                "Enter to pick — worldwide ranks the fastest globally",
+                options,
+                &initial.mirror_country,
+            )
         };
 
         let fields = vec![
@@ -869,22 +869,21 @@ fn list_field(
 }
 
 /// Map a "Mirror country" field value to what `reflector --country` expects:
-/// the 2-letter code from a `Name (CC)` list option, the raw text from the
-/// free-text fallback, or empty for the worldwide sentinel. `rsplit_once` takes
-/// the trailing `(CC)`, so country names that themselves contain parentheses
-/// (e.g. `Korea (South)`) still resolve to their code.
+/// the 2-letter code from a `Name (CC)` list option, empty for the worldwide
+/// sentinel, or the raw text from the off-Arch free-text fallback. `rsplit_once`
+/// takes the trailing `(CC)`, so country names that themselves contain
+/// parentheses (e.g. `Korea (South) (KR)`) still resolve to their code; a
+/// free-text entry without a trailing 2-letter code passes through unchanged.
 fn extract_country_code(option: &str) -> String {
     let option = option.trim();
-    if let Some(code) = option
+    if option == WORLDWIDE {
+        return String::new();
+    }
+    option
         .rsplit_once('(')
         .and_then(|(_, rest)| rest.strip_suffix(')'))
-    {
-        if code.len() == 2 && code.chars().all(|c| c.is_ascii_uppercase()) {
-            return code.to_owned();
-        }
-        return String::new(); // a parenthesised non-code = the worldwide sentinel
-    }
-    option.to_owned() // free-text fallback (system country list unavailable)
+        .filter(|code| code.len() == 2 && code.chars().all(|c| c.is_ascii_uppercase()))
+        .map_or_else(|| option.to_owned(), ToOwned::to_owned)
 }
 
 /// Parse a comma-separated package list, trimming whitespace and dropping empties.
@@ -1139,6 +1138,8 @@ mod tests {
         assert_eq!(extract_country_code(WORLDWIDE), ""); // worldwide sentinel
         assert_eq!(extract_country_code("Spain"), "Spain"); // free-text name
         assert_eq!(extract_country_code("FR"), "FR"); // free-text code
+        // Free-text with a non-code parenthetical passes through, not blanked.
+        assert_eq!(extract_country_code("Congo (DRC)"), "Congo (DRC)");
         assert_eq!(extract_country_code(""), "");
     }
 
