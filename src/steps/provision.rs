@@ -25,7 +25,7 @@ impl Step for Provision {
     }
 
     fn run(&self, ctx: &mut Context<'_>) -> Result<()> {
-        if !ctx.config.provision {
+        if !ctx.config.provision.enabled {
             ctx.info("skipped (provision disabled)");
             return Ok(());
         }
@@ -54,39 +54,43 @@ impl Step for Provision {
         write_sudoers(ctx, NOPASSWD_DROPIN, "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n")?;
 
         // 1. Build the V compiler from source and symlink it into ~/.local/bin.
-        best_effort(
-            ctx,
-            "building the V compiler",
-            &user_sh(
-                &user,
-                "mkdir -p ~/.local/bin && rm -rf ~/v && \
-                 git clone --depth=1 https://github.com/vlang/v ~/v && \
-                 cd ~/v && make && ./v symlink ~/.local/bin",
-            ),
-        );
-
-        // 2. Per-user tool installers (write into the user's home).
-        best_effort(
-            ctx,
-            "installing mise",
-            &user_sh(&user, "curl -fsSL https://mise.run | sh"),
-        );
-        best_effort(
-            ctx,
-            "installing global tools via mise",
-            &user_sh(
-                &user,
-                &format!(
-                    "~/.local/bin/mise use -g {}",
-                    stack::MISE_GLOBAL_TOOLS.join(" ")
+        if ctx.config.provision.v {
+            best_effort(
+                ctx,
+                "building the V compiler",
+                &user_sh(
+                    &user,
+                    "mkdir -p ~/.local/bin && rm -rf ~/v && \
+                     git clone --depth=1 https://github.com/vlang/v ~/v && \
+                     cd ~/v && make && ./v symlink ~/.local/bin",
                 ),
-            ),
-        );
-        best_effort(
-            ctx,
-            "installing Claude Code",
-            &user_sh(&user, "curl -fsSL https://claude.ai/install.sh | bash"),
-        );
+            );
+        }
+
+        // 2. AI/dev CLI tooling: mise (with its global tool set) and Claude Code.
+        if ctx.config.provision.tools {
+            best_effort(
+                ctx,
+                "installing mise",
+                &user_sh(&user, "curl -fsSL https://mise.run | sh"),
+            );
+            best_effort(
+                ctx,
+                "installing global tools via mise",
+                &user_sh(
+                    &user,
+                    &format!(
+                        "~/.local/bin/mise use -g {}",
+                        stack::MISE_GLOBAL_TOOLS.join(" ")
+                    ),
+                ),
+            );
+            best_effort(
+                ctx,
+                "installing Claude Code",
+                &user_sh(&user, "curl -fsSL https://claude.ai/install.sh | bash"),
+            );
+        }
 
         // 3. User-supplied commands, while passwordless sudo is still granted.
         for cmd in ctx.config.custom_commands.clone() {
@@ -160,8 +164,28 @@ mod tests {
     #[test]
     fn provision_disabled_does_nothing() {
         let mut cfg = config();
-        cfg.provision = false;
+        cfg.provision.enabled = false;
         assert!(dry_actions(&Provision, &cfg).is_empty());
+    }
+
+    #[test]
+    fn skipping_v_omits_the_compiler_build() {
+        let mut cfg = config();
+        cfg.provision.v = false;
+        let actions = dry_actions(&Provision, &cfg);
+        assert!(!actions.iter().any(|a| a.contains("vlang/v")));
+        // The tool set is independent and still runs.
+        assert!(actions.iter().any(|a| a.contains("mise use -g")));
+    }
+
+    #[test]
+    fn skipping_tools_omits_mise_and_claude_but_keeps_v() {
+        let mut cfg = config();
+        cfg.provision.tools = false;
+        let actions = dry_actions(&Provision, &cfg);
+        assert!(!actions.iter().any(|a| a.contains("mise")));
+        assert!(!actions.iter().any(|a| a.contains("claude.ai")));
+        assert!(actions.iter().any(|a| a.contains("vlang/v")));
     }
 
     #[test]

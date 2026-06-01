@@ -8,9 +8,19 @@ github_user = "davlgd"
 extra_packages = ["neovim"]
 zram_swap = true
 default_apps = true
-provision = true
 # custom_commands run as your user in the target at the end of provisioning:
 # custom_commands = ["git config --global pull.rebase true"]
+
+# Post-install provisioning (best-effort, network-bound). Omit a key to keep it
+# on; set enabled = false to skip provisioning entirely.
+[provision]
+enabled = true
+v = true      # build the V compiler from source
+tools = true  # mise + its global tool set + Claude Code (AI/dev CLIs)
+
+# Shell environment.
+[shell]
+aliases = true  # write the DALI alias/helper block into ~/.bashrc
 
 [user]
 username = "david"

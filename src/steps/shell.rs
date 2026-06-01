@@ -27,6 +27,13 @@ impl Step for ShellSetup {
         ctx.sys
             .write(&target_path("/etc/profile.d/10-dali-path.sh"), PROFILE_PATH)?;
 
+        // The PATH addition above is infrastructure (tools installed during
+        // provisioning must be found); the alias/helper block is opt-out.
+        if !ctx.config.shell.aliases {
+            ctx.info("skipping the ~/.bashrc alias block (shell.aliases = false)");
+            return Ok(());
+        }
+
         ctx.info(format!(
             "writing aliases and helpers to /home/{user}/.bashrc"
         ));
@@ -160,5 +167,21 @@ mod tests {
                 .iter()
                 .any(|a| a.contains("chown -R alice:alice /home/alice"))
         );
+    }
+
+    #[test]
+    fn disabling_aliases_keeps_path_but_skips_the_bashrc_block() {
+        let mut cfg = config();
+        cfg.shell.aliases = false;
+        let actions = dry_actions(&ShellSetup, &cfg);
+        // PATH is infrastructure and still written.
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/etc/profile.d/10-dali-path.sh"))
+        );
+        // The alias block and its chown are skipped.
+        assert!(!actions.iter().any(|a| a.contains(".bashrc")));
+        assert!(!actions.iter().any(|a| a.contains("chown")));
     }
 }

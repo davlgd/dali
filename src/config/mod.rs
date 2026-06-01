@@ -30,6 +30,78 @@ pub struct UserAccount {
     pub password: Secret,
 }
 
+/// Post-install provisioning options. Every sub-step is best-effort and
+/// network-bound; disable any that aren't wanted. Serializes as `[provision]`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(from = "ProvisionRepr")]
+pub struct ProvisionSettings {
+    /// Master switch: when false the whole provisioning step is skipped.
+    pub enabled: bool,
+    /// Build the V compiler from source and symlink it into `~/.local/bin`.
+    pub v: bool,
+    /// Install `mise` (with its global tool set) and Claude Code — the AI/dev
+    /// CLI tooling.
+    pub tools: bool,
+}
+
+impl Default for ProvisionSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            v: true,
+            tools: true,
+        }
+    }
+}
+
+/// Deserialization shim: accept either the modern `[provision]` table or a
+/// legacy bare `provision = true|false` (pre-0.4), which maps to the master
+/// switch alone. Keeps old config files loading with their intent intact.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ProvisionRepr {
+    Legacy(bool),
+    Detailed {
+        #[serde(default = "yes")]
+        enabled: bool,
+        #[serde(default = "yes")]
+        v: bool,
+        #[serde(default = "yes")]
+        tools: bool,
+    },
+}
+
+impl From<ProvisionRepr> for ProvisionSettings {
+    fn from(repr: ProvisionRepr) -> Self {
+        match repr {
+            ProvisionRepr::Legacy(enabled) => Self {
+                enabled,
+                ..Self::default()
+            },
+            ProvisionRepr::Detailed { enabled, v, tools } => Self { enabled, v, tools },
+        }
+    }
+}
+
+/// Shell environment options. Serializes as `[shell]`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Shell {
+    /// Write the DALI alias/function block into the user's `~/.bashrc`.
+    pub aliases: bool,
+}
+
+impl Default for Shell {
+    fn default() -> Self {
+        Self { aliases: true }
+    }
+}
+
+/// serde default helper: `true`.
+fn yes() -> bool {
+    true
+}
+
 /// Everything the user gets to decide. Sensible defaults are provided for all
 /// non-destructive fields so a config can be partial.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,16 +135,18 @@ pub struct InstallConfig {
     /// ([`stack::APP_SERVICES`]: docker, avahi, sshd). Disable for a bare
     /// bootable system.
     pub default_apps: bool,
-    /// Run the post-install provisioning: the V compiler and the `mise` /
-    /// Claude Code installers. Best-effort and network-bound.
-    pub provision: bool,
     /// Optional shell commands run as the user, inside the target, near the end
-    /// of provisioning (best-effort). Requires [`Self::provision`].
+    /// of provisioning (best-effort). Requires [`ProvisionSettings::enabled`].
     pub custom_commands: Vec<String>,
+    /// Post-install provisioning options. Serializes as the `[provision]` table,
+    /// so it is kept among the trailing tables (TOML forbids bare keys after a
+    /// table at the same level).
+    pub provision: ProvisionSettings,
+    /// Shell environment options. Serializes as the `[shell]` table.
+    pub shell: Shell,
     /// The administrator account to create (member of `wheel`, sudo-enabled).
     ///
-    /// Kept last so it serializes as a trailing `[user]` TOML table (TOML
-    /// forbids bare keys after a table at the same level).
+    /// Kept last so it serializes as a trailing `[user]` TOML table.
     pub user: UserAccount,
 }
 
@@ -89,8 +163,9 @@ impl Default for InstallConfig {
             extra_packages: Vec::new(),
             zram_swap: true,
             default_apps: true,
-            provision: true,
             custom_commands: Vec::new(),
+            provision: ProvisionSettings::default(),
+            shell: Shell::default(),
             user: UserAccount {
                 // No default username on purpose — the user must choose one.
                 username: String::new(),
@@ -369,6 +444,48 @@ mod tests {
         let loaded = InstallConfig::from_toml_file(&main).unwrap();
         assert_eq!(loaded.user.password.expose(), "hunter2");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn provision_and_shell_tables_round_trip() {
+        let mut config = config_with("/dev/vda", "pw");
+        config.provision.v = false;
+        config.shell.aliases = false;
+        let toml = config.to_toml().unwrap();
+        assert!(toml.contains("[provision]"));
+        assert!(toml.contains("[shell]"));
+        let parsed: InstallConfig = toml::from_str(&toml).unwrap();
+        assert!(parsed.provision.enabled);
+        assert!(!parsed.provision.v);
+        assert!(parsed.provision.tools);
+        assert!(!parsed.shell.aliases);
+    }
+
+    #[test]
+    fn legacy_bare_provision_bool_still_loads() {
+        // Pre-0.4 configs used `provision = true|false` at the top level; it must
+        // keep mapping to the master switch (sub-toggles default on).
+        let off: InstallConfig = toml::from_str(
+            "disk = \"/dev/vda\"\nprovision = false\n[user]\nusername=\"a\"\npassword=\"p\"\n",
+        )
+        .unwrap();
+        assert!(!off.provision.enabled);
+        assert!(off.provision.v && off.provision.tools);
+
+        let on: InstallConfig = toml::from_str(
+            "disk = \"/dev/vda\"\nprovision = true\n[user]\nusername=\"a\"\npassword=\"p\"\n",
+        )
+        .unwrap();
+        assert!(on.provision.enabled && on.provision.v && on.provision.tools);
+    }
+
+    #[test]
+    fn omitted_provision_and_shell_default_to_on() {
+        let cfg: InstallConfig =
+            toml::from_str("disk = \"/dev/vda\"\n[user]\nusername=\"a\"\npassword=\"p\"\n")
+                .unwrap();
+        assert!(cfg.provision.enabled && cfg.provision.v && cfg.provision.tools);
+        assert!(cfg.shell.aliases);
     }
 
     #[test]
