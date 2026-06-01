@@ -4,6 +4,15 @@ All notable changes to DALI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-01
+
+### Added
+
+- The interactive wizard now offers a **Dev/AI tools** yes/no toggle (the
+  `[provision]` step: V, `mise` + its tool set, Claude Code) and a filterable
+  **Mirror country** picker, so both can be set without writing a config file.
+  The remaining knobs stay configuration-file only.
+
 ## [0.4.0] - 2026-06-01
 
 ### Added
