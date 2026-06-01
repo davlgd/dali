@@ -311,6 +311,32 @@ fn lookup_country(table: &str, tz: &str) -> Option<String> {
         })
 }
 
+/// Country names with their ISO codes for the mirror picker, read from tzdata's
+/// `iso3166.tab` (present on the live ISO), formatted `Name (CC)` and sorted by
+/// name. Empty when the table is unavailable (e.g. rehearsing off-Arch).
+pub fn list_countries() -> Vec<String> {
+    std::fs::read_to_string("/usr/share/zoneinfo/iso3166.tab")
+        .map(|table| parse_countries(&table))
+        .unwrap_or_default()
+}
+
+/// Parse `iso3166.tab` (`CC\tName` lines, `#` comments) into sorted-by-name
+/// `Name (CC)` strings.
+fn parse_countries(table: &str) -> Vec<String> {
+    let mut countries: Vec<String> = table
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let (code, name) = line.split_once('\t')?;
+            let (code, name) = (code.trim(), name.trim());
+            (code.len() == 2 && code.chars().all(|c| c.is_ascii_uppercase()) && !name.is_empty())
+                .then(|| format!("{name} ({code})"))
+        })
+        .collect();
+    countries.sort();
+    countries
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,6 +357,15 @@ mod tests {
     #[test]
     fn list_files_in_missing_dir_is_empty() {
         assert!(list_files_in(Path::new("/nonexistent/dali/dir")).is_empty());
+    }
+
+    #[test]
+    fn parse_countries_formats_and_sorts_dropping_bad_lines() {
+        let table = "# iso3166.tab\nFR\tFrance\nDE\tGermany\nXX\t\nZZ\tZedland\n";
+        assert_eq!(
+            parse_countries(table),
+            ["France (FR)", "Germany (DE)", "Zedland (ZZ)"]
+        );
     }
 
     #[test]

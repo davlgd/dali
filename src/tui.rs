@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 
-use crate::config::{InstallConfig, Secret};
+use crate::config::{InstallConfig, ProvisionSettings, Secret};
 use crate::error::{Error, Result};
 use crate::system::probe;
 
@@ -137,9 +137,14 @@ const ROOT_PW_CONFIRM: usize = 6;
 const LOCALE: usize = 7;
 const KEYMAP: usize = 8;
 const TIMEZONE: usize = 9;
-const ZRAM: usize = 10;
-const EXTRA: usize = 11;
-const GITHUB: usize = 12;
+const MIRROR: usize = 10;
+const ZRAM: usize = 11;
+const PROVISION: usize = 12;
+const EXTRA: usize = 13;
+const GITHUB: usize = 14;
+
+/// The "no country / rank worldwide" option shown first in the mirror picker.
+const WORLDWIDE: &str = "Worldwide (fastest)";
 
 /// Open filterable-list state for a [`Kind::Choice`] field.
 struct Picker {
@@ -185,7 +190,7 @@ impl Wizard {
             ),
         };
 
-        // options are ["yes", "no"]: index 0 when zram is on, 1 when off.
+        // options are ["yes", "no"]: index 0 when on, 1 when off.
         let zram_default = usize::from(!initial.zram_swap);
         let zram = Field::pick_with(
             "Zram swap",
@@ -193,6 +198,35 @@ impl Wizard {
             vec!["yes".to_owned(), "no".to_owned()],
             zram_default,
         );
+        let provision_default = usize::from(!initial.provision.enabled);
+        let provision = Field::pick_with(
+            "Dev/AI tools",
+            "← → V, mise + AI CLIs, Claude Code (network, slower)",
+            vec!["yes".to_owned(), "no".to_owned()],
+            provision_default,
+        );
+
+        // Mirror country is list-backed when tzdata exposes the country table
+        // (the Arch ISO); free text otherwise. A leading "worldwide" option maps
+        // back to an empty mirror_country (rank the fastest mirrors globally).
+        let mirror = match probe::list_countries() {
+            countries if !countries.is_empty() => {
+                let mut options = Vec::with_capacity(countries.len() + 1);
+                options.push(WORLDWIDE.to_owned());
+                options.extend(countries);
+                Field::choice(
+                    "Mirror country",
+                    "Enter to pick — worldwide ranks the fastest globally",
+                    options,
+                    &initial.mirror_country,
+                )
+            }
+            _ => Field::text(
+                "Mirror country",
+                "optional — country name/code, empty = worldwide",
+                initial.mirror_country.clone(),
+            ),
+        };
 
         let fields = vec![
             disk_field,
@@ -223,7 +257,9 @@ impl Wizard {
                 probe::list_timezones(),
                 &initial.timezone,
             ),
+            mirror,
             zram,
+            provision,
             Field::text(
                 "Extra packages",
                 "optional, comma-separated",
@@ -473,11 +509,16 @@ impl Wizard {
             locale: self.text(LOCALE),
             keymap: self.text(KEYMAP),
             timezone: self.text(TIMEZONE),
+            mirror_country: extract_country_code(&self.text(MIRROR)),
             zram_swap: self.pick_value(ZRAM) == "yes",
+            provision: ProvisionSettings {
+                enabled: self.pick_value(PROVISION) == "yes",
+                ..ProvisionSettings::default()
+            },
             extra_packages: parse_packages(&self.text(EXTRA)),
             github_user: self.text(GITHUB).trim().to_owned(),
-            // default_apps / provision keep their defaults (on); they are not
-            // (yet) exposed in the wizard.
+            // default_apps keeps its default (on); the [shell] / dns_servers /
+            // ssh_password_auth knobs stay configuration-file only.
             ..InstallConfig::default()
         };
 
@@ -747,8 +788,16 @@ impl Wizard {
                 self.text(TIMEZONE)
             )),
             Line::from(format!(
-                "  root {root_state} · zram {} · extras {extras}",
-                self.pick_value(ZRAM)
+                "  root {root_state} · zram {} · dev/AI tools {}",
+                self.pick_value(ZRAM),
+                self.pick_value(PROVISION)
+            )),
+            Line::from(format!(
+                "  mirrors {} · extras {extras}",
+                match extract_country_code(&self.text(MIRROR)).as_str() {
+                    "" => "worldwide".to_owned(),
+                    code => code.to_owned(),
+                }
             )),
             Line::from(format!(
                 "  ssh keys {}",
@@ -817,6 +866,25 @@ fn list_field(
     } else {
         Field::choice(label, hint, options, initial)
     }
+}
+
+/// Map a "Mirror country" field value to what `reflector --country` expects:
+/// the 2-letter code from a `Name (CC)` list option, the raw text from the
+/// free-text fallback, or empty for the worldwide sentinel. `rsplit_once` takes
+/// the trailing `(CC)`, so country names that themselves contain parentheses
+/// (e.g. `Korea (South)`) still resolve to their code.
+fn extract_country_code(option: &str) -> String {
+    let option = option.trim();
+    if let Some(code) = option
+        .rsplit_once('(')
+        .and_then(|(_, rest)| rest.strip_suffix(')'))
+    {
+        if code.len() == 2 && code.chars().all(|c| c.is_ascii_uppercase()) {
+            return code.to_owned();
+        }
+        return String::new(); // a parenthesised non-code = the worldwide sentinel
+    }
+    option.to_owned() // free-text fallback (system country list unavailable)
 }
 
 /// Parse a comma-separated package list, trimming whitespace and dropping empties.
@@ -988,7 +1056,19 @@ mod tests {
             Field::choice("Locale", "", vec!["en_US.UTF-8".to_owned()], "en_US.UTF-8"),
             Field::choice("Keymap", "", vec!["us".to_owned()], "us"),
             Field::choice("Timezone", "", vec!["UTC".to_owned()], "UTC"),
+            Field::choice(
+                "Mirror country",
+                "",
+                vec![WORLDWIDE.to_owned(), "France (FR)".to_owned()],
+                "France (FR)",
+            ),
             Field::pick_with("Zram swap", "", vec!["yes".to_owned(), "no".to_owned()], 0),
+            Field::pick_with(
+                "Dev/AI tools",
+                "",
+                vec!["yes".to_owned(), "no".to_owned()],
+                0,
+            ),
             Field::text("Extra packages", "", "htop, git".to_owned()),
             Field::text("GitHub user", "", String::new()),
         ];
@@ -1009,7 +1089,7 @@ mod tests {
         // drifting out of lock-step with the form's build order — a silent
         // wrong-field read otherwise.
         let wizard = Wizard::new(InstallConfig::default());
-        assert_eq!(wizard.fields.len(), 13);
+        assert_eq!(wizard.fields.len(), 15);
         assert_eq!(wizard.fields[DISK].label, "Target disk");
         assert_eq!(wizard.fields[HOSTNAME].label, "Hostname");
         assert_eq!(wizard.fields[USERNAME].label, "Username");
@@ -1020,7 +1100,9 @@ mod tests {
         assert_eq!(wizard.fields[LOCALE].label, "Locale");
         assert_eq!(wizard.fields[KEYMAP].label, "Keymap");
         assert_eq!(wizard.fields[TIMEZONE].label, "Timezone");
+        assert_eq!(wizard.fields[MIRROR].label, "Mirror country");
         assert_eq!(wizard.fields[ZRAM].label, "Zram swap");
+        assert_eq!(wizard.fields[PROVISION].label, "Dev/AI tools");
         assert_eq!(wizard.fields[EXTRA].label, "Extra packages");
         assert_eq!(wizard.fields[GITHUB].label, "GitHub user");
     }
@@ -1042,8 +1124,22 @@ mod tests {
         assert_eq!(config.keymap, "us");
         assert_eq!(config.timezone, "UTC");
         assert!(config.zram_swap);
+        // Mirror country pre-selected to "France (FR)" -> stored as the code.
+        assert_eq!(config.mirror_country, "FR");
+        // Dev/AI tools pick defaults to "yes" -> provisioning enabled.
+        assert!(config.provision.enabled);
         assert_eq!(config.extra_packages, ["htop", "git"]);
         assert!(config.github_user.is_empty());
+    }
+
+    #[test]
+    fn extract_country_code_handles_options_and_freetext() {
+        assert_eq!(extract_country_code("France (FR)"), "FR");
+        assert_eq!(extract_country_code("Korea (South) (KR)"), "KR");
+        assert_eq!(extract_country_code(WORLDWIDE), ""); // worldwide sentinel
+        assert_eq!(extract_country_code("Spain"), "Spain"); // free-text name
+        assert_eq!(extract_country_code("FR"), "FR"); // free-text code
+        assert_eq!(extract_country_code(""), "");
     }
 
     #[test]
