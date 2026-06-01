@@ -99,13 +99,25 @@ pub fn pipeline() -> Vec<Box<dyn Step>> {
 /// The configuration is validated first; a destructive step never runs on an
 /// invalid config.
 pub fn install(config: &InstallConfig, sys: &dyn Sys, reporter: &mut dyn Reporter) -> Result<()> {
+    install_with(&pipeline(), config, sys, reporter)
+}
+
+/// Run a specific list of `steps` as a full install: validate, run the pipeline,
+/// then persist the transcript and per-step status into the target regardless of
+/// outcome. Split out from [`install`] so tests can drive a custom pipeline
+/// (e.g. inject a failing step) without rebuilding the diagnostics plumbing.
+fn install_with(
+    steps: &[Box<dyn Step>],
+    config: &InstallConfig,
+    sys: &dyn Sys,
+    reporter: &mut dyn Reporter,
+) -> Result<()> {
     config.validate()?;
 
-    let steps = pipeline();
     // Capture a transcript + per-step status alongside the live reporter so they
     // can be written into the installed system.
     let mut transcript = TranscriptReporter::new(reporter);
-    let outcome = run_pipeline(&steps, config, sys, &mut transcript);
+    let outcome = run_pipeline(steps, config, sys, &mut transcript);
 
     // Best-effort diagnostics, so they never mask the real outcome and so a
     // failed install still records how far it got (where /mnt is available).
@@ -338,6 +350,51 @@ mod tests {
         assert!(result.is_err());
         assert!(transcript.transcript().contains("step failed"));
         assert!(transcript.transcript().contains("kaboom"));
+    }
+
+    #[test]
+    fn install_persists_diagnostics_even_when_a_step_fails() {
+        // A mid-pipeline failure must still propagate the error *and* leave the
+        // install log + step status behind (they explain a partial install).
+        struct Ok1;
+        impl Step for Ok1 {
+            fn name(&self) -> &'static str {
+                "Ok step"
+            }
+            fn run(&self, ctx: &mut Context<'_>) -> Result<()> {
+                ctx.info("did a thing");
+                Ok(())
+            }
+        }
+        struct Boom;
+        impl Step for Boom {
+            fn name(&self) -> &'static str {
+                "Boom"
+            }
+            fn run(&self, _: &mut Context<'_>) -> Result<()> {
+                Err(crate::error::Error::Config("kaboom".into()))
+            }
+        }
+
+        let steps: Vec<Box<dyn Step>> = vec![Box::new(Ok1), Box::new(Boom)];
+        let sys = DrySys::new();
+        let mut reporter = NullReporter;
+        let result = install_with(&steps, &sample_config(), &sys, &mut reporter);
+
+        assert!(result.is_err(), "the failure propagates to the caller");
+        let actions = sys.actions();
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/var/log/dali-install.log")),
+            "the install log is persisted on failure"
+        );
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("/var/log/dali-steps.toml")),
+            "the per-step status is persisted on failure"
+        );
     }
 
     #[test]

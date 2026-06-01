@@ -261,6 +261,11 @@ INSTALLED_CHECKS = [
     ("CHK_ATUIN", "grep -q 'atuin init bash' /home/*/.bashrc"),
     ("CHK_SSHD_HARDENED", "grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/10-dali-hardening.conf"),
     ("CHK_FIREWALL", "test -x /usr/local/bin/dali-firewall"),
+    # The first-boot one-shot is ordered loosely against multi-user.target, so it
+    # may still be applying when the login prompt appears: wait briefly for it.
+    ("CHK_FIREWALL_ACTIVE",
+     "for _ in $(seq 30); do ufw status 2>/dev/null | grep -q 'Status: active' && break; "
+     "sleep 1; done; ufw status | grep -q 'Status: active'"),
 ]
 
 

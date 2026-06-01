@@ -7,9 +7,12 @@ DALI is tested at three levels, from fast to thorough.
 In-module `#[cfg(test)]` tests cover config validation, the package set, the
 `Secret` redaction, command/chroot construction, partition-path derivation,
 disk probing, the bootloader entry, the TUI helpers, the sshd/firewall
-hardening (including a lockout-safety check that the firewall keeps SSH open),
-the iwd→NetworkManager profile conversion and SSID decoding, and the
-`DEFAULT_APPS`/`APP_SERVICES` drift guard.
+hardening (including a lockout-safety check that the firewall keeps SSH open
+and the password-auth resolution rules), the iwd→NetworkManager profile
+conversion and SSID decoding, the `[provision]`/`[shell]` toggles (including
+legacy-config compatibility), the `DEFAULT_APPS`/`APP_SERVICES` drift guard,
+and the pipeline's failure handling — a mid-pipeline failure still propagates
+the error and persists the install log and per-step status.
 
 ```sh
 cargo test
@@ -70,7 +73,8 @@ Expect it to take several minutes (the VM downloads packages via `pacstrap`).
    artifacts are present: the snapper config, the NetworkManager issue
    dispatcher, the install/step logs, `/etc/os-release` (`ID=arch` + `DALI_*`),
    `/etc/dali-release`, the bash-preexec/atuin wiring, the sshd hardening
-   drop-in and the `dali-firewall` script. (Skipped if no `root_password`.)
+   drop-in, and that the `dali-firewall` one-shot ran (ufw reports
+   `Status: active`). (Skipped if no `root_password`.)
 
 Logs for each phase are written to the `--work` directory (`phase1.log`,
 `phase2.log`).
