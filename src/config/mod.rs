@@ -135,6 +135,10 @@ pub struct InstallConfig {
     /// ([`stack::APP_SERVICES`]: docker, avahi, sshd). Disable for a bare
     /// bootable system.
     pub default_apps: bool,
+    /// Nameservers written to the target's `/etc/resolv.conf` for the duration of
+    /// the chroot (NetworkManager takes over after first boot). Empty leaves
+    /// whatever `pacstrap` copied in place.
+    pub dns_servers: Vec<String>,
     /// Optional shell commands run as the user, inside the target, near the end
     /// of provisioning (best-effort). Requires [`ProvisionSettings::enabled`].
     pub custom_commands: Vec<String>,
@@ -163,6 +167,7 @@ impl Default for InstallConfig {
             extra_packages: Vec::new(),
             zram_swap: true,
             default_apps: true,
+            dns_servers: vec!["9.9.9.9".to_owned(), "1.1.1.1".to_owned()],
             custom_commands: Vec::new(),
             provision: ProvisionSettings::default(),
             shell: Shell::default(),
@@ -283,6 +288,13 @@ impl InstallConfig {
         for package in &self.extra_packages {
             validate_package_name(package)?;
         }
+        for ns in &self.dns_servers {
+            if ns.parse::<std::net::IpAddr>().is_err() {
+                return Err(Error::Config(format!(
+                    "invalid DNS server `{ns}` (expected an IP address)"
+                )));
+            }
+        }
         if !self.github_user.is_empty() {
             validate_github_user(&self.github_user)?;
         }
@@ -369,6 +381,20 @@ mod tests {
                 "`{package}` (owner of `{service}`) must be in DEFAULT_APPS"
             );
         }
+    }
+
+    #[test]
+    fn invalid_dns_server_is_rejected() {
+        let mut config = config_with("/dev/vda", "pw");
+        config.dns_servers = vec!["9.9.9.9".into(), "not-an-ip".into()];
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn empty_dns_servers_is_allowed() {
+        let mut config = config_with("/dev/vda", "pw");
+        config.dns_servers.clear();
+        assert!(config.validate().is_ok());
     }
 
     #[test]

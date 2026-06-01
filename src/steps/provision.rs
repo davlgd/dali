@@ -31,23 +31,23 @@ impl Step for Provision {
         }
         let user = ctx.config.user.username.clone();
 
-        // `arch-chroot` does not guarantee working DNS, so give the target a
-        // public resolver for the duration. NetworkManager manages
-        // /etc/resolv.conf itself after first boot, overwriting this. Remove any
-        // existing file first in case a package shipped it as a symlink (which
-        // `write` would otherwise follow). This `rm` runs on the host against the
-        // `/mnt` path, not in the chroot: `arch-chroot` bind-mounts the live
-        // system's /etc/resolv.conf over the target's, so an in-chroot `rm` would
-        // hit a busy mount point and fail.
-        ctx.sys.run(
-            &Command::new("rm")
-                .arg("-f")
-                .arg(target_path("/etc/resolv.conf")),
-        )?;
-        ctx.sys.write(
-            &target_path("/etc/resolv.conf"),
-            "nameserver 9.9.9.9\nnameserver 1.1.1.1\n",
-        )?;
+        // `arch-chroot` does not guarantee working DNS, so give the target the
+        // configured resolvers for the duration. NetworkManager manages
+        // /etc/resolv.conf itself after first boot, overwriting this. An empty
+        // `dns_servers` leaves whatever `pacstrap` copied in place.
+        if let Some(resolv) = resolv_conf(&ctx.config.dns_servers) {
+            // Remove any existing file first in case a package shipped it as a
+            // symlink (which `write` would otherwise follow). This `rm` runs on
+            // the host against the `/mnt` path, not in the chroot: `arch-chroot`
+            // bind-mounts the live system's /etc/resolv.conf over the target's,
+            // so an in-chroot `rm` would hit a busy mount point and fail.
+            ctx.sys.run(
+                &Command::new("rm")
+                    .arg("-f")
+                    .arg(target_path("/etc/resolv.conf")),
+            )?;
+            ctx.sys.write(&target_path("/etc/resolv.conf"), &resolv)?;
+        }
 
         // `custom_commands` may use sudo; grant the wheel group passwordless
         // sudo for the duration and revoke it at the end.
@@ -128,6 +128,21 @@ impl Step for Provision {
     }
 }
 
+/// Build a `resolv.conf` body from the configured nameservers, or `None` when
+/// the list is empty (leave whatever `pacstrap` copied).
+fn resolv_conf(dns: &[String]) -> Option<String> {
+    if dns.is_empty() {
+        return None;
+    }
+    let mut body = String::new();
+    for ns in dns {
+        body.push_str("nameserver ");
+        body.push_str(ns);
+        body.push('\n');
+    }
+    Some(body)
+}
+
 /// A command running `script` as `user` with a login shell inside the target.
 fn user_sh(user: &str, script: &str) -> Command {
     Command::new("runuser")
@@ -159,6 +174,23 @@ mod tests {
         let actions = dry_actions(&Provision, &config());
         assert!(actions.iter().any(|a| a.contains("vlang/v")));
         assert!(actions.iter().any(|a| a.contains("mise use -g")));
+    }
+
+    #[test]
+    fn resolv_conf_builds_from_servers_or_skips_when_empty() {
+        assert_eq!(resolv_conf(&[]), None);
+        assert_eq!(
+            resolv_conf(&["9.9.9.9".to_owned(), "1.1.1.1".to_owned()]).as_deref(),
+            Some("nameserver 9.9.9.9\nnameserver 1.1.1.1\n")
+        );
+    }
+
+    #[test]
+    fn empty_dns_servers_leaves_resolv_conf_untouched() {
+        let mut cfg = config();
+        cfg.dns_servers.clear();
+        let actions = dry_actions(&Provision, &cfg);
+        assert!(!actions.iter().any(|a| a.contains("resolv.conf")));
     }
 
     #[test]
