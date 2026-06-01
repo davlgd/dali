@@ -25,13 +25,15 @@ impl Step for HostPrep {
     }
 }
 
-/// Rank mirrors with reflector: by the timezone's country and by speed, falling
-/// back to a worldwide ranking, then to the stock mirrorlist. Best-effort — a
-/// missing reflector or no network must never abort the install.
+/// Rank mirrors with reflector by speed, optionally restricted to the
+/// configured `mirror_country` (worldwide by default), falling back to a
+/// worldwide ranking, then to the stock mirrorlist. Best-effort — a missing
+/// reflector or no network must never abort the install.
 fn refresh_mirrors(ctx: &mut Context<'_>) {
-    let country = probe::country_from_timezone(&ctx.config.timezone);
+    let configured = ctx.config.mirror_country.trim();
+    let country = (!configured.is_empty()).then_some(configured);
     ctx.info("refreshing the mirrorlist (reflector)");
-    if ctx.sys.run(&reflector_cmd(country.as_deref())).is_err() {
+    if ctx.sys.run(&reflector_cmd(country)).is_err() {
         let recovered = country.is_some() && ctx.sys.run(&reflector_cmd(None)).is_ok();
         if !recovered {
             ctx.info("reflector unavailable; keeping the existing mirrorlist");
@@ -200,7 +202,7 @@ mod tests {
         use crate::steps::test_support::{config, dry_actions};
 
         let fr = InstallConfig {
-            timezone: "Europe/Paris".to_owned(),
+            mirror_country: "FR".to_owned(),
             ..config()
         };
         let actions = dry_actions(&HostPrep, &fr);
@@ -213,5 +215,17 @@ mod tests {
             .position(|a| a.contains("reflector --country FR"))
             .expect("reflector ran for FR");
         assert!(tune < reflector, "mirrors refreshed after tuning");
+    }
+
+    #[test]
+    fn dry_run_default_ranks_mirrors_worldwide() {
+        use crate::steps::test_support::{config, dry_actions};
+        // No mirror_country configured -> reflector runs without --country.
+        let actions = dry_actions(&HostPrep, &config());
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.contains("reflector") && !a.contains("--country"))
+        );
     }
 }

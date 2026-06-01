@@ -14,6 +14,9 @@ default_apps = true
 # Resolvers used inside the chroot (NetworkManager takes over after first boot).
 # Defaults to Quad9 + Cloudflare; set to [] to keep what pacstrap copied.
 dns_servers = ["9.9.9.9", "1.1.1.1"]
+# Restrict reflector's mirror ranking to a country (name or code, comma-separated
+# for several). Empty ranks the fastest mirrors worldwide.
+# mirror_country = "France"
 # custom_commands run as your user in the target at the end of provisioning:
 # custom_commands = ["git config --global pull.rebase true"]
 

@@ -145,6 +145,10 @@ pub struct InstallConfig {
     /// the chroot (NetworkManager takes over after first boot). Empty leaves
     /// whatever `pacstrap` copied in place.
     pub dns_servers: Vec<String>,
+    /// Country to restrict the `reflector` mirror ranking to (a name or code,
+    /// e.g. `France` or `FR`, comma-separated for several). Empty (the default)
+    /// ranks mirrors worldwide by speed.
+    pub mirror_country: String,
     /// Optional shell commands run as the user, inside the target, near the end
     /// of provisioning (best-effort). Requires [`ProvisionSettings::enabled`].
     pub custom_commands: Vec<String>,
@@ -175,6 +179,7 @@ impl Default for InstallConfig {
             zram_swap: true,
             default_apps: true,
             dns_servers: vec!["9.9.9.9".to_owned(), "1.1.1.1".to_owned()],
+            mirror_country: String::new(),
             custom_commands: Vec::new(),
             provision: ProvisionSettings::default(),
             shell: Shell::default(),
@@ -301,6 +306,13 @@ impl InstallConfig {
                     "invalid DNS server `{ns}` (expected an IP address)"
                 )));
             }
+        }
+        let country = self.mirror_country.trim();
+        if country.starts_with('-') || country.chars().any(char::is_control) {
+            return Err(Error::Config(format!(
+                "invalid mirror_country `{}`",
+                self.mirror_country
+            )));
         }
         if !self.github_user.is_empty() {
             validate_github_user(&self.github_user)?;
