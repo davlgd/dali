@@ -5,6 +5,9 @@ locale = "en_US.UTF-8"
 keymap = "fr"
 root_password = ""
 github_user = "davlgd"
+# sshd password authentication. Omit to auto-decide (off when github_user keys
+# are imported, on otherwise); set explicitly to force it.
+# ssh_password_auth = false
 extra_packages = ["neovim"]
 zram_swap = true
 default_apps = true

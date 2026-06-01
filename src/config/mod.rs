@@ -126,6 +126,12 @@ pub struct InstallConfig {
     /// (`https://github.com/<user>.keys`) are imported as the user's accepted
     /// SSH keys. Empty means "don't import".
     pub github_user: String,
+    /// Whether sshd accepts password authentication. `None` (the default) is
+    /// resolved at install time: password auth is disabled when SSH keys are
+    /// imported (a non-empty [`Self::github_user`]) and kept otherwise, so a
+    /// keyless box is never locked out. `Some(_)` is always honored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssh_password_auth: Option<bool>,
     /// Extra packages to install on top of [`stack::BASE_PACKAGES`].
     pub extra_packages: Vec<String>,
     /// Enable a compressed RAM swap device (zram) sized to total RAM, capped at
@@ -164,6 +170,7 @@ impl Default for InstallConfig {
             keymap: "us".to_owned(),
             root_password: Secret::default(),
             github_user: String::new(),
+            ssh_password_auth: None,
             extra_packages: Vec::new(),
             zram_swap: true,
             default_apps: true,

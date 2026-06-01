@@ -25,10 +25,16 @@ impl Step for Harden {
             return Ok(());
         }
 
-        ctx.info("writing the sshd hardening drop-in");
+        let password_auth =
+            password_auth_enabled(ctx.config.ssh_password_auth, &ctx.config.github_user);
+        ctx.info(if password_auth {
+            "writing the sshd hardening drop-in"
+        } else {
+            "writing the sshd hardening drop-in (password auth disabled)"
+        });
         ctx.sys.write(
             &target_path("/etc/ssh/sshd_config.d/10-dali-hardening.conf"),
-            SSHD_HARDENING,
+            &sshd_hardening(password_auth),
         )?;
 
         ctx.info("installing the first-boot firewall setup (ufw)");
@@ -53,9 +59,27 @@ impl Step for Harden {
     }
 }
 
-/// sshd hardening: root is already locked by default, so disable root SSH
+/// sshd hardening base: root is already locked by default, so disable root SSH
 /// outright and cap auth attempts.
-const SSHD_HARDENING: &str = "PermitRootLogin no\nMaxAuthTries 3\n";
+const SSHD_BASE: &str = "PermitRootLogin no\nMaxAuthTries 3\n";
+
+/// Resolve whether sshd should accept password authentication. An explicit
+/// config value always wins; otherwise password auth is disabled exactly when
+/// SSH keys are imported (a non-empty GitHub user), so a keyless host keeps a
+/// way in.
+fn password_auth_enabled(explicit: Option<bool>, github_user: &str) -> bool {
+    explicit.unwrap_or_else(|| github_user.trim().is_empty())
+}
+
+/// Build the sshd drop-in, appending `PasswordAuthentication no` when password
+/// auth is disabled.
+fn sshd_hardening(password_auth: bool) -> String {
+    let mut conf = String::from(SSHD_BASE);
+    if !password_auth {
+        conf.push_str("PasswordAuthentication no\n");
+    }
+    conf
+}
 
 /// First-boot firewall script path.
 const FIREWALL_SCRIPT: &str = "/usr/local/bin/dali-firewall";
@@ -121,11 +145,28 @@ mod tests {
 
     #[test]
     fn sshd_disables_root_login_and_firewall_keeps_ssh() {
-        assert!(SSHD_HARDENING.contains("PermitRootLogin no"));
+        assert!(sshd_hardening(true).contains("PermitRootLogin no"));
         // The firewall must allow SSH, or enabling deny-incoming locks us out.
         assert!(FIREWALL_SETUP.contains("ufw allow ssh"));
         assert!(FIREWALL_SETUP.contains("deny incoming"));
         // `set -e` so a failed run retries instead of self-disabling.
         assert!(FIREWALL_SETUP.contains("set -e"));
+    }
+
+    #[test]
+    fn sshd_drop_in_toggles_password_auth() {
+        assert!(!sshd_hardening(true).contains("PasswordAuthentication"));
+        assert!(sshd_hardening(false).contains("PasswordAuthentication no"));
+    }
+
+    #[test]
+    fn password_auth_resolution_honors_config_then_keys() {
+        // Explicit config always wins.
+        assert!(password_auth_enabled(Some(true), "davlgd"));
+        assert!(!password_auth_enabled(Some(false), ""));
+        // Unset: keys imported (GitHub user) disables it; keyless keeps it.
+        assert!(!password_auth_enabled(None, "davlgd"));
+        assert!(password_auth_enabled(None, ""));
+        assert!(password_auth_enabled(None, "   "));
     }
 }
